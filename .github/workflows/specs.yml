@@ -1,0 +1,37 @@
+name: Refresh Amazon specs
+
+# Amazon changes its Ads API specs without notice. Weekly, re-download every spec,
+# regenerate the operation catalog and coverage page, and open a pull request if
+# anything changed, so new endpoints and media type versions reach the library.
+
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.13"
+      - run: uv sync --all-extras
+      - run: uv run python scripts/fetch_specs.py
+      - run: uv run python scripts/generate_catalog.py
+      - run: uv run pytest
+      - uses: peter-evans/create-pull-request@v7
+        with:
+          branch: specs/refresh
+          commit-message: Refresh the operation catalog from Amazon's published specs
+          title: Refresh the operation catalog from Amazon's published specs
+          body: |
+            Weekly re-download of every Amazon Ads API spec. Review the diff of
+            `docs/reference/coverage.md` for added, removed or changed operations, and
+            check whether any typed resource needs a matching change.
+          delete-branch: true
