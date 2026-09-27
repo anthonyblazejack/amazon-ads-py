@@ -12,7 +12,10 @@ Behavior of the live Amazon Ads API that its documentation and specs do not stat
 
 ## Writes
 - Batch writes answer 207 Multi-Status and succeed or fail per item, even when every
-  item failed. Always read the per-item results (this client's BatchResult).
+  item failed. Always read the per-item results (this client's BatchResult). Amazon's
+  per-item results are the record of what changed; no read-back is needed.
+- Single items inside a batch can be throttled (throttledError) while the rest succeed.
+  The client resends those alone. Bid errors carry the allowed lowerLimit and upperLimit.
 - Create and update accept at most 1000 items per call; the client chunks for you.
 - Archiving (POST .../delete) is permanent: an archived entity cannot be re-enabled.
   Pause instead when the change might need undoing.

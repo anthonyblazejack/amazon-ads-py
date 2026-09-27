@@ -469,11 +469,26 @@ class AdsTools:
         rollback = result.rollback_plan()
         self.plan_dir.mkdir(parents=True, exist_ok=True)
         rollback.save(self.plan_dir)
-        errors = [
-            {"operation": key, "index": e.index, "code": e.code, "message": e.message}
-            for key, r in result.results.items()
-            for e in r.errors
-        ]
+        changes = plan.grouped()
+        errors = []
+        for key, r in result.results.items():
+            for e in r.errors:
+                change = changes[key][e.index] if 0 <= e.index < len(changes[key]) else None
+                errors.append(
+                    {
+                        "operation": key,
+                        "id": change.id if change else None,
+                        "label": change.label if change else None,
+                        "sent": change.after if change else None,
+                        "error_type": e.error_type,
+                        "code": e.code,
+                        "message": e.message,
+                        "allowed_range": [e.lower_limit, e.upper_limit]
+                        if e.lower_limit is not None or e.upper_limit is not None
+                        else None,
+                        "what_to_do": e.hint,
+                    }
+                )
         created = {key: r.ids for key, r in result.results.items() if key.startswith("create")}
         record = {
             "plan_id": plan.id,

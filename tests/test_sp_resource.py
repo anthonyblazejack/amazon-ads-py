@@ -140,3 +140,79 @@ def test_plan_update_records_only_real_changes(api: respx.MockRouter, us: Profil
     assert change.label == "a [EXACT]"
     assert plan.missing == ["9"]
     assert plan.profile_id == us.profile_id
+
+
+def throttled_or_ok(throttle_first: set[str]):  # type: ignore[no-untyped-def]
+    """Answer a keyword write, throttling each id in ``throttle_first`` on its first send."""
+    seen: set[str] = set()
+
+    def respond(request: Request) -> Response:
+        sent = json.loads(request.content)["keywords"]
+        success, error = [], []
+        for i, item in enumerate(sent):
+            key = item.get("keywordId") or item.get("keywordText")
+            if key in throttle_first and key not in seen:
+                seen.add(key)
+                error.append(
+                    {
+                        "index": i,
+                        "errors": [
+                            {
+                                "errorType": "throttledError",
+                                "errorValue": {"throttledError": {"reason": "THROTTLED"}},
+                            }
+                        ],
+                    }
+                )
+            else:
+                success.append({"index": i, "keywordId": f"id-{key}"})
+        return Response(207, json={"keywords": {"success": success, "error": error}})
+
+    return respond
+
+
+def test_items_amazon_throttled_inside_a_batch_are_resent_alone(
+    api: respx.MockRouter, us: ProfileClient, sleeps
+) -> None:  # type: ignore[no-untyped-def]
+    route = api.put(f"{NA}/sp/keywords").mock(side_effect=throttled_or_ok({"b"}))
+    result = us.sp.keywords.update(
+        [{"keywordId": "a", "bid": 1}, {"keywordId": "b", "bid": 1}, {"keywordId": "c", "bid": 1}]
+    )
+    assert result.ok
+    assert [s.index for s in result.successes] == [0, 1, 2]
+    assert result.successes[1].item == {"keywordId": "b", "bid": 1}
+    assert json.loads(route.calls[1].request.content) == {
+        "keywords": [{"keywordId": "b", "bid": 1}]
+    }
+    assert len(sleeps) == 1
+
+
+def test_create_is_not_resent_after_an_internal_error(
+    api: respx.MockRouter, us: ProfileClient
+) -> None:
+    # The keyword may have been created before Amazon failed; a resend could duplicate it.
+    route = api.post(f"{NA}/sp/keywords").mock(
+        return_value=Response(
+            207,
+            json={
+                "keywords": {
+                    "error": [
+                        {
+                            "index": 0,
+                            "errors": [
+                                {
+                                    "errorType": "internalServerError",
+                                    "errorValue": {
+                                        "internalServerError": {"reason": "INTERNAL_ERROR"}
+                                    },
+                                }
+                            ],
+                        }
+                    ]
+                }
+            },
+        )
+    )
+    result = us.sp.keywords.create([{"campaignId": "1", "adGroupId": "2", "keywordText": "x"}])
+    assert route.call_count == 1
+    assert "check whether it exists" in result.errors[0].hint

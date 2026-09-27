@@ -68,3 +68,32 @@ def test_legacy_list_shape() -> None:
     assert result.ids == ["11"]
     assert result.errors[0].message == "Bid too low"
     assert result.errors[0].code == "INVALID_ARGUMENT"
+
+
+def test_bid_errors_carry_amazons_allowed_range() -> None:
+    body = {
+        "keywords": {
+            "error": [
+                {
+                    "index": 0,
+                    "errors": [
+                        {
+                            "errorType": "biddingError",
+                            "errorValue": {
+                                "biddingError": {
+                                    "reason": "BID_OUT_OF_MARKET_PLACE_RANGE",
+                                    "message": "Bid is out of range",
+                                    "lowerLimit": 0.02,
+                                    "upperLimit": 1000,
+                                }
+                            },
+                        }
+                    ],
+                }
+            ]
+        }
+    }
+    [error] = parse_multi_status(body, SENT[:1]).errors
+    assert (error.error_type, error.lower_limit, error.upper_limit) == ("biddingError", 0.02, 1000)
+    assert error.hint == "Allowed range is 0.02 to 1000.0."
+    assert not error.transient

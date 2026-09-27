@@ -45,6 +45,12 @@ A write that fails with 5xx or times out may still have been applied, and resend
 create could duplicate campaigns or keywords. So writes raise instead of retrying: check
 the account (list the entities) before trying again.
 
+The same rules apply to single items inside a 207 batch response. An item Amazon marks
+`throttledError` is sent again on its own with backoff. An item marked
+`internalServerError` is sent again for updates and archives, but not for creates. Every
+other per-item error comes back in the `BatchResult` with its `hint` and any allowed range
+(see [batch results](campaign-management.md#batch-results)).
+
 A 429 also starts a **shared cooldown**. Every other request through the same client
 waits it out too, instead of making things worse.
 

@@ -584,7 +584,9 @@ def plan_apply(ctx: Context, plan_file: str, check_drift: bool, yes: bool) -> No
         result.raise_for_errors()
     except PartialFailureError as exc:
         for error in exc.result.errors:
-            click.echo(f"  item {error.index}: {error.code}: {error.message}", err=True)
+            click.echo(
+                f"  item {error.index}: {error.code}: {error.message} ({error.hint})", err=True
+            )
         sys.exit(2)
 
 

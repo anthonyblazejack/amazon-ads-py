@@ -37,13 +37,60 @@ class BatchSuccess(Generic[T]):
     entity: dict[str, Any] | None = None
 
 
+# Per-item failures that mean Amazon did not act on the item, so sending it again is
+# safe. Anything else (a bid out of range, an archived parent, a duplicate) fails the same
+# way every time and is returned to the caller instead.
+TRANSIENT_ERROR_TYPES = frozenset({"throttledError", "internalServerError"})
+TRANSIENT_CODES = frozenset({"THROTTLED", "INTERNAL_ERROR", "SERVER_IS_BUSY"})
+
+
 @dataclass(frozen=True)
 class BatchError(Generic[T]):
+    """One item Amazon rejected.
+
+    ``error_type`` is Amazon's error family (``biddingError``, ``entityStateError``, ...),
+    ``code`` its reason (``BID_OUT_OF_MARKET_PLACE_RANGE``, ``TOO_LOW``, ...). Bid and range
+    errors carry the allowed ``lower_limit`` and ``upper_limit``. :attr:`hint` says what to
+    do about it in plain words.
+    """
+
     index: int
     item: T | None
     code: str | None
     message: str
     raw: Any = None
+    error_type: str | None = None
+    lower_limit: float | None = None
+    upper_limit: float | None = None
+
+    @property
+    def transient(self) -> bool:
+        """Amazon did not act on the item (throttled or an internal error)."""
+        return self.error_type in TRANSIENT_ERROR_TYPES or (self.code or "") in TRANSIENT_CODES
+
+    @property
+    def hint(self) -> str:
+        if self.lower_limit is not None or self.upper_limit is not None:
+            return f"Allowed range is {self.lower_limit} to {self.upper_limit}."
+        family = self.error_type or ""
+        if family == "throttledError" or self.code == "THROTTLED":
+            return "Amazon kept throttling this item after retries; send it again later."
+        if family == "internalServerError" or self.code == "INTERNAL_ERROR":
+            return (
+                "Amazon failed internally on this item. For a create, check whether it exists"
+                " before sending it again."
+            )
+        if family == "entityNotFoundError":
+            return "No entity with this id in this profile."
+        if family == "duplicateValueError":
+            return "It already exists; nothing new was created."
+        if family == "entityStateError":
+            return "The entity or its parent is archived or paused in a way that forbids this."
+        if family in {"missingValueError", "malformedValueError", "invalidInputError"}:
+            return "Fix the field named in the message and send it again."
+        if family == "entityQuotaError":
+            return "An Amazon account limit was reached (too many of this entity)."
+        return "See Amazon's message."
 
 
 @dataclass
@@ -138,8 +185,19 @@ def parse_multi_status(
 
     for entry in container.get("error") or []:
         index = offset + int(entry.get("index", 0))
-        code, message = _describe_errors(entry.get("errors") or [])
-        result.errors.append(BatchError(index, item_at(index), code, message, entry))
+        info = _describe_errors(entry.get("errors") or [])
+        result.errors.append(
+            BatchError(
+                index,
+                item_at(index),
+                info["code"],
+                info["message"],
+                entry,
+                error_type=info["error_type"],
+                lower_limit=info["lower"],
+                upper_limit=info["upper"],
+            )
+        )
 
     return result
 
@@ -170,26 +228,48 @@ def _find_id(entry: dict[str, Any], id_field: str | None) -> str | None:
     return None
 
 
-def _describe_errors(errors: list[Any]) -> tuple[str | None, str]:
-    """Pull a readable code and message out of SP v3's nested ``errorValue`` objects."""
+def _describe_errors(errors: list[Any]) -> dict[str, Any]:
+    """Pull a readable code, message, error family and any allowed range out of SP v3's
+    nested ``errorValue`` objects."""
     codes: list[str] = []
     messages: list[str] = []
+    error_type: str | None = None
+    lower: float | None = None
+    upper: float | None = None
     for err in errors:
         if not isinstance(err, dict):
             messages.append(str(err))
             continue
-        error_type = err.get("errorType")
+        family = err.get("errorType")
         value = err.get("errorValue")
         detail: dict[str, Any] = {}
         if isinstance(value, dict):
-            inner = value.get(error_type) if error_type else None
+            if not family and len(value) == 1:
+                family = next(iter(value))
+            inner = value.get(family) if family else None
             if isinstance(inner, dict):
                 detail = inner
             else:
                 detail = next((v for v in value.values() if isinstance(v, dict)), value)
-        code = detail.get("reason") or error_type or err.get("code")
+        error_type = error_type or (str(family) if family else None)
+        code = detail.get("reason") or family or err.get("code")
         if code:
             codes.append(str(code))
+        lower = lower if lower is not None else _number(detail.get("lowerLimit"))
+        upper = upper if upper is not None else _number(detail.get("upperLimit"))
         message = detail.get("message") or err.get("message") or err.get("details")
         messages.append(str(message or code or err))
-    return (codes[0] if codes else None), "; ".join(messages) or "Unknown error"
+    return {
+        "code": codes[0] if codes else None,
+        "message": "; ".join(messages) or "Unknown error",
+        "error_type": error_type,
+        "lower": lower,
+        "upper": upper,
+    }
+
+
+def _number(value: Any) -> float | None:
+    try:
+        return float(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None

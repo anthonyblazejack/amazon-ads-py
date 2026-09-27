@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `BatchError` carries Amazon's error family (`error_type`), the allowed range for bid and
+  range errors (`lower_limit`, `upper_limit`), a plain-language `hint`, and `transient`.
+- Items rejected as throttled inside a 207 batch are sent again alone with backoff; items
+  that hit an internal error are resent for updates and archives but never for creates.
+- `apply_plan` in the MCP server reports each failed item with its id, label, what was
+  sent, the allowed range and what to do.
+
 ## [0.1.0] - 2026-09-26
 
 First release.

@@ -103,6 +103,10 @@ Keeping `apply_plan` out of your allow list gives a second, independent approval
 
 ## Errors
 
+`apply_plan` returns every item Amazon rejected with the entity id and label, what was
+sent, Amazon's error type, reason and message, the allowed range for bid errors, and a
+plain `what_to_do`. Items Amazon throttled mid-batch have already been retried.
+
 When a tool refuses or Amazon rejects something, the reason goes back to Claude as the
 tool result (for example `PermissionError: Fingerprint does not match this plan`), so
 it can explain or correct course.

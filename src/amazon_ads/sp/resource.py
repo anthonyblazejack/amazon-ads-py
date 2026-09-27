@@ -14,7 +14,8 @@ Every SP v3 entity follows the same contract:
 from __future__ import annotations
 
 import builtins
-from collections.abc import Iterable, Iterator, Mapping, Sequence
+import dataclasses
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
@@ -181,27 +182,18 @@ class SpResource(Generic[M]):
     def delete(self, ids: Sequence[str | int]) -> BatchResult[dict[str, Any]]:
         """Archive entities. Amazon has no hard delete; archived entities stay listable
         with ``states=["ARCHIVED"]`` and cannot be re-enabled."""
-        result: BatchResult[dict[str, Any]] = BatchResult()
-        offset = 0
-        id_items = [{self.spec.id_field: str(i)} for i in ids]
-        for chunk in _chunks(id_items, self.spec.max_batch):
-            response = self._client.request(
+        items = [{self.spec.id_field: str(i)} for i in ids]
+        id_field = self.spec.id_field
+        return self._send(
+            items,
+            lambda chunk: self._client.request(
                 "POST",
                 f"{self.spec.path}/delete",
-                json={self.spec.id_filter: {"include": [c[self.spec.id_field] for c in chunk]}},
+                json={self.spec.id_filter: {"include": [c[id_field] for c in chunk]}},
                 content_type=self.spec.media_type,
-            )
-            result.extend(
-                parse_multi_status(
-                    response.json(),
-                    chunk,
-                    entity_key=self.spec.collection_key,
-                    id_field=self.spec.success_id_field,
-                    offset=offset,
-                )
-            )
-            offset += len(chunk)
-        return result
+            ).json(),
+            repeatable=True,
+        )
 
     def set_state(self, ids: Sequence[str | int], state: str) -> BatchResult[dict[str, Any]]:
         """Enable or pause entities. Use :meth:`delete` to archive."""
@@ -326,25 +318,68 @@ class SpResource(Generic[M]):
     def _write(
         self, method: str, path: str, payloads: builtins.list[dict[str, Any]]
     ) -> BatchResult[dict[str, Any]]:
-        result: BatchResult[dict[str, Any]] = BatchResult()
-        offset = 0
-        for chunk in _chunks(payloads, self.spec.max_batch):
-            response = self._client.request(
+        return self._send(
+            payloads,
+            lambda chunk: self._client.request(
                 method,
                 path,
                 json={self.spec.collection_key: chunk},
                 content_type=self.spec.media_type,
-            )
-            result.extend(
-                parse_multi_status(
-                    response.json(),
-                    chunk,
+            ).json(),
+            # Re-sending an update or archive sets the same values again. Re-sending a
+            # create after an internal error could make a second copy, so creates are only
+            # retried when Amazon said it throttled them.
+            repeatable=method != "POST",
+        )
+
+    def _send(
+        self,
+        items: builtins.list[dict[str, Any]],
+        send_chunk: Callable[[builtins.list[dict[str, Any]]], Any],
+        *,
+        repeatable: bool,
+    ) -> BatchResult[dict[str, Any]]:
+        """Send items in chunks of the batch limit and parse every 207 answer.
+
+        Items Amazon rejected as throttled (and, for repeatable writes, internal errors)
+        are sent again with backoff, alone, so one busy moment does not fail part of a
+        batch. Every result keeps the index of its item in ``items``.
+        """
+        transport = self._client.account.transport
+        result: BatchResult[dict[str, Any]] = BatchResult()
+        pending = list(enumerate(items))
+        attempt = 0
+        while pending:
+            attempt += 1
+            retry: builtins.list[tuple[int, dict[str, Any]]] = []
+            for chunk in _chunks(pending, self.spec.max_batch):
+                sent = [item for _, item in chunk]
+                parsed = parse_multi_status(
+                    send_chunk(sent),
+                    sent,
                     entity_key=self.spec.collection_key,
                     id_field=self.spec.success_id_field,
-                    offset=offset,
                 )
-            )
-            offset += len(chunk)
+                for success in parsed.successes:
+                    original = chunk[success.index][0] if success.index < len(chunk) else -1
+                    result.successes.append(dataclasses.replace(success, index=original))
+                for error in parsed.errors:
+                    original = chunk[error.index][0] if error.index < len(chunk) else -1
+                    throttled = error.error_type == "throttledError" or error.code == "THROTTLED"
+                    again = error.transient and (repeatable or throttled)
+                    if (
+                        again
+                        and attempt < transport.retry.max_attempts
+                        and error.index < len(chunk)
+                    ):
+                        retry.append(chunk[error.index])
+                    else:
+                        result.errors.append(dataclasses.replace(error, index=original))
+            pending = retry
+            if pending:
+                self._client.account.sleep(transport.retry.backoff(attempt))
+        result.successes.sort(key=lambda s: s.index)
+        result.errors.sort(key=lambda e: e.index)
         return result
 
 

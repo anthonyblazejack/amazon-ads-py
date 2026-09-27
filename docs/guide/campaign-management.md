@@ -82,8 +82,23 @@ result.summary()               # "48 succeeded, 2 failed"
 result.raise_for_errors()      # PartialFailureError(result) if anything failed
 ```
 
-`BatchError.message` is Amazon's reason pulled out of its nested error objects, for
-example `"Bid must be at least 0.02"`. `item` is what you sent for that entry.
+Each `BatchError` has:
+
+| Field | Meaning |
+|---|---|
+| `item` | What you sent for that entry |
+| `error_type` | Amazon's error family: `biddingError`, `rangeError`, `entityStateError`, `duplicateValueError`, `entityNotFoundError`, ... |
+| `code` | Amazon's reason, e.g. `BID_OUT_OF_MARKET_PLACE_RANGE`, `TOO_LOW`, `PARENT_ARCHIVED_FORBIDS_UPDATES` |
+| `message` | Amazon's message, pulled out of its nested error objects |
+| `lower_limit`, `upper_limit` | The allowed range, for bid and range errors |
+| `hint` | What to do about it, in plain words |
+| `transient` | `True` when Amazon did not act on the item (throttled or internal error) |
+
+**Items rejected as throttled inside a batch are sent again**, alone and with backoff,
+so a busy moment does not fail part of a batch. Items that failed with an internal error
+are sent again for updates and archives, which are safe to repeat, but not for creates,
+because the item may already exist. Everything else (a bid out of range, an archived
+parent, a duplicate) would fail the same way again and is returned to you.
 
 To review changes before sending them, and to be able to undo them, use
 [change plans](change-plans.md).
