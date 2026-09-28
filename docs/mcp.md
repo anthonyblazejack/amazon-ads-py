@@ -58,7 +58,7 @@ If `amazon-ads-mcp` is not on the client's `PATH`, give the full path (for examp
 |---|---|
 | `api_notes` | Amazon API behavior the docs do not state. The server's instructions tell Claude to read it once per session. |
 | `list_profiles` | Every marketplace the credentials reach |
-| `list_entities` | Campaigns, ad groups, keywords, targets, negatives, ads, portfolios, with filters and a text search |
+| `list_entities` | Campaigns, ad groups, keywords, targets, negatives, ads, portfolios, and Sponsored Brands campaigns, keywords and negative keywords (`sb_*`), with filters and a text search |
 | `get_suggested_bids` | Suggested low/median/high next to the live bid for existing keywords or targets |
 | `get_suggested_bids_for_new` | Suggested bids for keywords and ASIN targets before an ad group exists |
 | `get_change_history` | What changed, from what, to what, when |

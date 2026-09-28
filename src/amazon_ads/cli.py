@@ -46,6 +46,9 @@ ENTITIES = {
     "campaign-negative-targets": "campaign_negative_targets",
     "product-ads": "product_ads",
     "portfolios": "portfolios",
+    "sb-campaigns": "sb_campaigns",
+    "sb-keywords": "sb_keywords",
+    "sb-negative-keywords": "sb_negative_keywords",
 }
 
 # Columns shown in table output; --json always prints every field.
@@ -60,6 +63,9 @@ TABLE_COLUMNS = {
     "campaign_negative_targets": ["targetId", "campaignId", "expression", "state"],
     "product_ads": ["adId", "adGroupId", "asin", "sku", "state"],
     "portfolios": ["portfolioId", "name", "state", "budget"],
+    "sb_campaigns": ["campaignId", "name", "state", "budget", "bidding"],
+    "sb_keywords": ["keywordId", "adGroupId", "keywordText", "matchType", "state", "bid"],
+    "sb_negative_keywords": ["keywordId", "adGroupId", "keywordText", "matchType", "state"],
 }
 
 
@@ -314,16 +320,17 @@ def list_entities(
     states: tuple[str, ...],
     all_states: bool,
 ) -> None:
-    """List campaigns, ad groups, keywords, targets, negatives, ads or portfolios."""
+    """List campaigns, ad groups, keywords, targets, negatives, ads or portfolios, and
+    Sponsored Brands campaigns, keywords and negative keywords (the sb-* entities)."""
     client = ctx.profile(market)
     attr = ENTITIES[entity]
-    resource = client.portfolios if attr == "portfolios" else getattr(client.sp, attr)
+    resource = _resource(client, attr)
     kwargs: dict[str, Any] = {}
     if ids:
         kwargs["ids"] = ids
     if campaign_ids and attr != "portfolios":
         kwargs["campaign_ids"] = campaign_ids
-    if ad_group_ids and attr not in {"portfolios", "campaigns"}:
+    if ad_group_ids and attr not in {"portfolios", "campaigns", "sb_campaigns"}:
         kwargs["ad_group_ids"] = ad_group_ids
     if all_states:
         kwargs["states"] = None
@@ -518,12 +525,21 @@ def plan_update(
     """
     client = ctx.profile(market)
     attr = ENTITIES[entity]
-    resource = client.portfolios if attr == "portfolios" else getattr(client.sp, attr)
+    resource = _resource(client, attr)
     items = _read_changes(Path(changes_file))
     built = resource.plan_update(items, note=note)
     path = built.save(out)
     click.echo(built.to_markdown())
     click.echo(f"\nSaved {path}. Apply with: adsctl plan apply {path}")
+
+
+def _resource(client: ProfileClient, attr: str) -> Any:
+    """The resource behind a CLI entity name: portfolios, sb_* or a Sponsored Products one."""
+    if attr == "portfolios":
+        return client.portfolios
+    if attr.startswith("sb_"):
+        return getattr(client.sb, attr.removeprefix("sb_"))
+    return getattr(client.sp, attr)
 
 
 def _read_changes(path: Path) -> list[dict[str, Any]]:

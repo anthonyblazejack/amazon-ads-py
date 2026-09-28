@@ -8,6 +8,14 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Sponsored Brands campaign management: `ProfileClient.sb.campaigns` (v4),
+  `sb.keywords` and `sb.negative_keywords` (v3) with the same list, update, create,
+  archive and change-plan interface as Sponsored Products. Plans, drift checks and
+  rollback plans work for them, so the MCP server's `list_entities`, `plan_update`,
+  `plan_create` and `plan_archive` accept `sb_campaigns`, `sb_keywords` and
+  `sb_negative_keywords`, and `adsctl list` / `adsctl plan update` accept the `sb-*`
+  names. Updates fill in the parent ids SB v3 requires; campaign updates carry placement
+  premiums in `bidding`.
 - Sponsored Brands report presets: `sb_campaigns`, `sb_targeting`, `sb_search_terms` and
   `sb_purchased_products`, available to `Reports.run`, `adsctl report`, `adsctl sync` and
   the MCP server's `run_report`.

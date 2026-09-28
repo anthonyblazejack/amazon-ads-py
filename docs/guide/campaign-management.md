@@ -1,4 +1,4 @@
-# Campaign management (Sponsored Products)
+# Campaign management (Sponsored Products and Sponsored Brands)
 
 Every Sponsored Products entity has the same interface:
 
@@ -102,3 +102,43 @@ parent, a duplicate) would fail the same way again and is returned to you.
 
 To review changes before sending them, and to be able to undo them, use
 [change plans](change-plans.md).
+
+## Sponsored Brands
+
+Sponsored Brands campaigns, keywords and negative keywords have the same interface, under
+`ProfileClient.sb`:
+
+| Resource | Model | Id field | Amazon API |
+|---|---|---|---|
+| `sb.campaigns` | `SbCampaign` | `campaignId` | v4 (`/sb/v4/campaigns`) |
+| `sb.keywords` | `SbKeyword` | `keywordId` | v3 (`/sb/keywords`) |
+| `sb.negative_keywords` | `SbNegativeKeyword` | `keywordId` | v3 (`/sb/negativeKeywords`) |
+
+```python
+us.sb.keywords.list(campaign_ids=["303"])               # enabled and paused
+us.sb.keywords.update([{"keywordId": "101", "bid": 0.95}])
+us.sb.negative_keywords.create([
+    {"campaignId": "303", "adGroupId": "202", "keywordText": "free pdf",
+     "matchType": "negativeExact"},
+])
+us.sb.campaigns.update([{"campaignId": "303", "bidding": {
+    "bidOptimization": False,
+    "bidAdjustmentsByPlacement": [{"placement": "TOP_OF_SEARCH", "percentage": 60}],
+}}])
+plan = us.sb.keywords.plan_update([{"keywordId": "101", "bid": 0.95}])   # plans work too
+```
+
+Differences from Sponsored Products, all handled for you:
+
+- **Keywords are on the older v3 API.** Ids are integers and states and match types are
+  lower case (`enabled`, `phrase`); negative match types are `negativeExact` and
+  `negativePhrase`. Pass states in either case; they are sent lower case.
+- **An update must repeat the keyword's parent ids.** Amazon requires `adGroupId` and
+  `campaignId` next to `keywordId`; they are read from the account when you leave them out.
+- **Smaller batches.** Keyword writes go 100 at a time, campaign writes 10 at a time.
+- **Negative keywords cannot be paused.** They are `enabled` or `archived`; `list()` shows
+  enabled ones unless you pass `states=None`.
+- **Archiving a keyword is one request per keyword** (`DELETE /sb/keywords/{keywordId}`);
+  a keyword Amazon cannot find comes back as a per-item `NOT_FOUND` error, not an exception.
+- **Placement premiums live in `bidding`.** Send the whole `bidding` object on a campaign
+  update; change plans compare it as one field.

@@ -16,7 +16,7 @@ for kw in us.sp.keywords.list(states=["ENABLED"]):
 | | |
 |---|---|
 | **Coverage** | All 1,204 operations in Amazon's 220 published API specs, callable by id ([any endpoint](guide/any-endpoint.md), [coverage](reference/coverage.md)) |
-| **Typed layer** | Sponsored Products campaigns, ad groups, keywords, targets, negatives, product ads, portfolios; suggested bids; change history; reports; profiles |
+| **Typed layer** | Sponsored Products campaigns, ad groups, keywords, targets, negatives, product ads, portfolios; Sponsored Brands campaigns, keywords, negative keywords; suggested bids; change history; reports; profiles |
 | **Writes** | Per-item results for Amazon's 207 responses, automatic chunking to batch limits, read-only fields stripped from updates ([campaign management](guide/campaign-management.md)) |
 | **Plans** | Before/after review, fingerprints, drift checks, rollback plans, restore-from-history ([change plans](guide/change-plans.md)) |
 | **Throttling** | Retry-After honored, shared cooldown, no blind retries of writes ([errors and throttling](guide/errors-and-throttling.md)) |

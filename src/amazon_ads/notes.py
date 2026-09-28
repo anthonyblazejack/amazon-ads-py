@@ -75,6 +75,20 @@ API_NOTES = """\
   API campaign id; the SB v4 list endpoints answer 400 "Id filter has invalid value".
   List without a filter and match on name, or read campaignId from a report.
 
+## Sponsored Brands keywords and campaigns
+- Keywords and negative keywords are still on the v3 API: GET lists with comma-delimited
+  filters and startIndex/count paging (count=500 is accepted), integer ids, lower-case
+  states. The v3.2 list media types (application/vnd.sbkeyword.v3.2+json,
+  application/vnd.sbnegativekeyword.v3.2+json) work. This client's sb.keywords and
+  sb.negative_keywords handle all of that and take plans like Sponsored Products.
+- A campaign's top-of-search premium is readable and writable only through
+  bidding.bidAdjustmentsByPlacement on /sb/v4/campaigns. The advertising console's
+  campaign settings page does not show it.
+- A campaign read returns four bidAdjustmentsByPlacement entries (DETAIL_PAGE,
+  TOP_OF_SEARCH, HOME, OTHER), while the v4 spec caps an update request at three. Whether
+  Amazon accepts the four it returned has not been tested; send only the placements you
+  mean to set if an update is rejected.
+
 ## Profiles and regions
 - Profiles live on three regional hosts (NA, EU, FE). Australia and Japan are FE; the UK
   and India are EU. One consent through amazon.com can cover all three.

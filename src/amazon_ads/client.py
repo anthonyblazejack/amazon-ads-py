@@ -176,6 +176,7 @@ class ProfileClient:
 
     Attributes:
         sp: Sponsored Products campaigns, ad groups, keywords, targets, negatives, ads.
+        sb: Sponsored Brands campaigns, keywords and negative keywords.
         portfolios: Portfolios.
         bids: Suggested bids.
         history: Change history.
@@ -186,6 +187,7 @@ class ProfileClient:
         from amazon_ads.bids import BidRecommendations
         from amazon_ads.history import History
         from amazon_ads.reports import Reports
+        from amazon_ads.sb import SponsoredBrands
         from amazon_ads.sp import PORTFOLIOS, SponsoredProducts
         from amazon_ads.sp.resource import SpResource
 
@@ -193,6 +195,7 @@ class ProfileClient:
         self.profile = profile
         self.region: Region = region_for(profile.country_code)
         self.sp: SponsoredProducts = SponsoredProducts(self)
+        self.sb: SponsoredBrands = SponsoredBrands(self)
         self.portfolios: SpResource[Any] = SpResource(self, PORTFOLIOS)
         self.bids: BidRecommendations = BidRecommendations(self)
         self.history: History = History(self)
@@ -281,10 +284,15 @@ class ProfileClient:
             return response.text
 
     def resource(self, kind: str) -> SpResource[Any]:
-        """The resource behind a change plan's ``kind`` (``"sp.keywords"``, ...)."""
+        """The resource behind a change plan's ``kind`` (``"sp.keywords"``,
+        ``"sb.keywords"``, ...)."""
+        from amazon_ads.sb import resource_for
         from amazon_ads.sp import ALL_SPECS
         from amazon_ads.sp.resource import SpResource
 
+        sb_resource = resource_for(self, kind)
+        if sb_resource is not None:
+            return sb_resource
         for spec in ALL_SPECS:
             if spec.kind == kind:
                 return SpResource(self, spec)

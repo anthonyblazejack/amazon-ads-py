@@ -220,6 +220,55 @@ class Portfolio(ApiModel):
     extended_data: dict[str, Any] | None = None
 
 
+# --- Sponsored Brands ---------------------------------------------------------------------
+
+
+class SbCampaign(ApiModel):
+    """A Sponsored Brands campaign (v4). ``bidding`` holds ``bidOptimization`` and the
+    placement premiums in ``bidAdjustmentsByPlacement``; send the whole object to change
+    either. ``state`` is upper case (``ENABLED``)."""
+
+    campaign_id: str | None = None
+    portfolio_id: str | None = None
+    name: str | None = None
+    state: str | None = None
+    budget: float | None = None
+    budget_type: str | None = None
+    bidding: dict[str, Any] | None = None
+    start_date: str | None = None
+    end_date: str | None = None
+    goal: str | None = None
+    cost_type: str | None = None
+    tags: dict[str, str] | None = None
+    extended_data: dict[str, Any] | None = None
+
+
+class SbKeyword(ApiModel):
+    """A Sponsored Brands keyword (v3). Ids are integers and ``state`` and ``match_type``
+    are lower case (``enabled``, ``phrase``), unlike Sponsored Products."""
+
+    keyword_id: int | None = None
+    campaign_id: int | None = None
+    ad_group_id: int | None = None
+    keyword_text: str | None = None
+    native_language_keyword: str | None = None
+    match_type: str | None = None
+    state: str | None = None
+    bid: float | None = None
+
+
+class SbNegativeKeyword(ApiModel):
+    """A Sponsored Brands negative keyword (v3): ``negativeExact`` or ``negativePhrase``,
+    and only ``enabled`` or ``archived`` (it cannot be paused)."""
+
+    keyword_id: int | None = None
+    campaign_id: int | None = None
+    ad_group_id: int | None = None
+    keyword_text: str | None = None
+    match_type: str | None = None
+    state: str | None = None
+
+
 # --- Bid recommendations ------------------------------------------------------------------
 
 

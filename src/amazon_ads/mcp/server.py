@@ -55,6 +55,9 @@ ENTITIES = (
     "campaign_negative_targets",
     "product_ads",
     "portfolios",
+    "sb_campaigns",
+    "sb_keywords",
+    "sb_negative_keywords",
 )
 
 INSTRUCTIONS = """\
@@ -111,6 +114,9 @@ class AdsTools:
         client = self._client(market)
         if entity == "portfolios":
             return client.portfolios
+        if entity.startswith("sb_"):
+            sb_resource: SpResource[Any] = getattr(client.sb, entity.removeprefix("sb_"))
+            return sb_resource
         resource: SpResource[Any] = getattr(client.sp, entity)
         return resource
 
@@ -155,13 +161,15 @@ class AdsTools:
         include_archived: bool = False,
         text_contains: str | None = None,
     ) -> dict[str, Any]:
-        """List Sponsored Products entities in one market.
+        """List Sponsored Products or Sponsored Brands entities in one market.
 
         entity: campaigns, ad_groups, keywords, targets, negative_keywords,
         negative_targets, campaign_negative_keywords, campaign_negative_targets,
-        product_ads or portfolios. States default to ENABLED and PAUSED;
-        include_archived lists every state. text_contains filters keywords, names and
-        ASINs case-insensitively after fetching.
+        product_ads, portfolios, sb_campaigns, sb_keywords or sb_negative_keywords.
+        States default to enabled and paused (enabled only for sb_negative_keywords);
+        include_archived lists every state. Sponsored Brands keyword states are lower
+        case. text_contains filters keywords, names and ASINs case-insensitively after
+        fetching.
         """
         resource = self._resource(market, entity)
         kwargs: dict[str, Any] = {}
@@ -169,7 +177,7 @@ class AdsTools:
             kwargs["ids"] = ids
         if campaign_ids and entity != "portfolios":
             kwargs["campaign_ids"] = campaign_ids
-        if ad_group_ids and entity not in {"portfolios", "campaigns"}:
+        if ad_group_ids and entity not in {"portfolios", "campaigns", "sb_campaigns"}:
             kwargs["ad_group_ids"] = ad_group_ids
         if include_archived:
             kwargs["states"] = None
@@ -387,7 +395,10 @@ class AdsTools:
         self, market: str, entity: str, changes: list[dict[str, Any]], note: str | None = None
     ) -> dict[str, Any]:
         """Build (not apply) an update: each change is the entity id plus new values,
-        e.g. {"keywordId": "123", "bid": 0.45} or {"targetId": "9", "state": "PAUSED"}."""
+        e.g. {"keywordId": "123", "bid": 0.45} or {"targetId": "9", "state": "PAUSED"}.
+        entity takes the same names as list_entities, including sb_campaigns (budget,
+        state, and "bidding" for placement premiums: send the whole bidding object),
+        sb_keywords (bid, state) and sb_negative_keywords (state)."""
         plan = self._resource(market, entity).plan_update(changes, note=note)
         return self._present(plan)
 
@@ -395,7 +406,9 @@ class AdsTools:
         self, market: str, entity: str, items: list[dict[str, Any]], note: str | None = None
     ) -> dict[str, Any]:
         """Build (not apply) a create, e.g. keywords [{"campaignId", "adGroupId",
-        "keywordText", "matchType": "EXACT", "bid": 0.5, "state": "ENABLED"}]."""
+        "keywordText", "matchType": "EXACT", "bid": 0.5, "state": "ENABLED"}], or
+        sb_negative_keywords [{"campaignId", "adGroupId", "keywordText",
+        "matchType": "negativeExact"}] (Sponsored Brands match types are camelCase)."""
         plan = self._resource(market, entity).plan_create(items, note=note)
         return self._present(plan)
 
