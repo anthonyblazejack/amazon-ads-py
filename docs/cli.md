@@ -66,7 +66,8 @@ adsctl report PRESET -m US [--start -7] [--end -1] [--summary] [--out rows.json]
 ```
 
 `PRESET`: `sp_campaigns`, `sp_placement`, `sp_ad_groups`, `sp_targeting`,
-`sp_search_terms`, `sp_advertised_products`, `sp_purchased_products`.
+`sp_search_terms`, `sp_advertised_products`, `sp_purchased_products`, `sb_campaigns`,
+`sb_targeting`, `sb_search_terms`, `sb_purchased_products`.
 
 ## sync
 

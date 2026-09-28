@@ -56,6 +56,18 @@ Behavior of the live Amazon Ads API that its documentation and specs do not stat
   report id in the message; reuse it.
 - In spTargeting, keywordId holds the target id for product targets.
 - Search term reports only include terms with at least one click.
+- Sponsored Brands sales and purchases count any product of the brand bought within 14
+  days of a click, not only the products in the ad. sbPurchasedProduct (the console's
+  "Attributed Purchases" report) names each product bought; attributionType is
+  "Promoted" when it was one of the ad's products and "Brand Halo" otherwise.
+- Sponsored Brands report types accept different columns: sbTargeting rejects the Kindle
+  page columns, sbSearchTerm also rejects detailPageViews, and SB metrics have no
+  1d/7d/14d suffix except in sbPurchasedProduct.
+
+## Sponsored Brands ids
+- The campaign id in an advertising console URL (a string starting with "A") is not the
+  API campaign id; the SB v4 list endpoints answer 400 "Id filter has invalid value".
+  List without a filter and match on name, or read campaignId from a report.
 
 ## Profiles and regions
 - Profiles live on three regional hosts (NA, EU, FE). Australia and Japan are FE; the UK

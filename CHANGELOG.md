@@ -8,6 +8,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Sponsored Brands report presets: `sb_campaigns`, `sb_targeting`, `sb_search_terms` and
+  `sb_purchased_products`, available to `Reports.run`, `adsctl report`, `adsctl sync` and
+  the MCP server's `run_report`.
 - `BatchError` carries Amazon's error family (`error_type`), the allowed range for bid and
   range errors (`lower_limit`, `upper_limit`), a plain-language `hint`, and `transient`.
 - Items rejected as throttled inside a 207 batch are sent again alone with backoff; items

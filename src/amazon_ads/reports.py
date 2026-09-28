@@ -10,9 +10,10 @@ gzipped JSON file. :meth:`Reports.run` does all of that and also:
   failing,
 * warns when a range reaches past Amazon's retention (about 95 days; 65 for search terms).
 
-Every preset in :data:`PRESETS` was accepted by Amazon's live API for a Sponsored Products
-(KDP author) profile in September 2026. Pass ``columns=`` to change them, or a full
-``configuration`` dict for anything else (Sponsored Brands, Sponsored Display, DSP).
+Every preset in :data:`PRESETS` (``sp_*`` for Sponsored Products, ``sb_*`` for Sponsored
+Brands) was accepted by Amazon's live API for a KDP author profile in September 2026.
+Pass ``columns=`` to change them, or a full ``configuration`` dict for anything else
+(Sponsored Display, DSP).
 """
 
 from __future__ import annotations
@@ -55,6 +56,11 @@ _METRICS_1_7_14 = [
     "kindleEditionNormalizedPagesRead14d",
     "kindleEditionNormalizedPagesRoyalties14d",
 ]
+
+# Sponsored Brands reports have one fixed attribution window (14 days), so the metrics
+# carry no 1d/7d/14d suffix. Each SB report type accepts a different subset: sbTargeting
+# rejects the Kindle page columns and sbSearchTerm also rejects detailPageViews.
+_SB_METRICS = ["impressions", "clicks", "cost", "purchases", "sales", "unitsSold"]
 
 
 @dataclass(frozen=True)
@@ -206,6 +212,105 @@ PRESETS: dict[str, ReportPreset] = {
         key_columns=("adGroupId", "keywordId", "matchType", "advertisedAsin", "purchasedAsin"),
         description="Products bought after an ad click that were not the advertised "
         "product (halo sales).",
+    ),
+    "sb_campaigns": ReportPreset(
+        "sbCampaigns",
+        ("campaign",),
+        (
+            "date",
+            "campaignId",
+            "campaignName",
+            "campaignStatus",
+            "campaignBudgetAmount",
+            "campaignBudgetType",
+            "campaignBudgetCurrencyCode",
+            "topOfSearchImpressionShare",
+            *_SB_METRICS,
+            "detailPageViews",
+            "kindleEditionNormalizedPagesRead14d",
+            "kindleEditionNormalizedPagesRoyalties14d",
+        ),
+        key_columns=("campaignId",),
+        ad_product="SPONSORED_BRANDS",
+        description="One row per Sponsored Brands campaign per day. Sales count any "
+        "product of the brand, not only the ones in the ad.",
+    ),
+    "sb_targeting": ReportPreset(
+        "sbTargeting",
+        ("targeting",),
+        (
+            "date",
+            "campaignId",
+            "campaignName",
+            "adGroupId",
+            "adGroupName",
+            "keywordId",
+            "keywordText",
+            "keywordType",
+            "matchType",
+            "targetingId",
+            "targetingExpression",
+            "targetingText",
+            "targetingType",
+            "keywordBid",
+            "adKeywordStatus",
+            "topOfSearchImpressionShare",
+            *_SB_METRICS,
+            "detailPageViews",
+        ),
+        key_columns=("adGroupId", "targetingId"),
+        ad_product="SPONSORED_BRANDS",
+        description="One row per Sponsored Brands keyword or product target per day. "
+        "keywordBid is the bid at pull time.",
+    ),
+    "sb_search_terms": ReportPreset(
+        "sbSearchTerm",
+        ("searchTerm",),
+        (
+            "date",
+            "campaignId",
+            "campaignName",
+            "adGroupId",
+            "adGroupName",
+            "keywordId",
+            "keywordText",
+            "keywordType",
+            "matchType",
+            "searchTerm",
+            *_SB_METRICS,
+        ),
+        # Amazon does not document SB search-term retention; this assumes it matches the
+        # 65 days measured for Sponsored Products search terms.
+        retention_days=65,
+        key_columns=("adGroupId", "keywordId", "searchTerm"),
+        ad_product="SPONSORED_BRANDS",
+        description="One row per customer search term per Sponsored Brands target per day.",
+    ),
+    "sb_purchased_products": ReportPreset(
+        "sbPurchasedProduct",
+        ("purchasedAsin",),
+        (
+            "date",
+            "campaignId",
+            "campaignName",
+            "adGroupId",
+            "adGroupName",
+            "attributionType",
+            "purchasedAsin",
+            "productName",
+            "productCategory",
+            "orders14d",
+            "sales14d",
+            "unitsSold14d",
+            "newToBrandPurchases14d",
+            "newToBrandSales14d",
+            "newToBrandUnitsSold14d",
+        ),
+        key_columns=("campaignId", "adGroupId", "purchasedAsin", "attributionType"),
+        ad_product="SPONSORED_BRANDS",
+        description="Every product bought within 14 days of a Sponsored Brands click, "
+        "which can be any product of the brand. attributionType says whether it was in "
+        "the ad (Promoted) or not (Brand Halo).",
     ),
 }
 

@@ -317,7 +317,9 @@ class AdsTools:
         """Run a report (dates YYYY-MM-DD, any length) and return rows or totals.
 
         preset: sp_campaigns, sp_placement, sp_ad_groups, sp_targeting, sp_search_terms,
-        sp_advertised_products, sp_purchased_products. group_by (e.g. ["campaignName",
+        sp_advertised_products, sp_purchased_products, sb_campaigns, sb_targeting,
+        sb_search_terms, sb_purchased_products (which product a Sponsored Brands click
+        actually sold). group_by (e.g. ["campaignName",
         "placementClassification"]) sums numeric columns per group instead of returning
         daily rows. save_to writes every row to a JSON file.
         """

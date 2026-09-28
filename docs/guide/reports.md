@@ -23,8 +23,7 @@ result.to_dataframe()
 
 ## Presets
 
-Every preset was accepted by the live API for a Sponsored Products profile in September
-2026.
+Every preset was accepted by the live API for a KDP author profile in September 2026.
 
 | Preset | Amazon report | One row per |
 |---|---|---|
@@ -35,10 +34,18 @@ Every preset was accepted by the live API for a Sponsored Products profile in Se
 | `sp_search_terms` | spSearchTerm | search term, target, day |
 | `sp_advertised_products` | spAdvertisedProduct | advertised product, day |
 | `sp_purchased_products` | spPurchasedProduct | product bought after a click that was not the one advertised |
+| `sb_campaigns` | sbCampaigns by campaign | Sponsored Brands campaign, day |
+| `sb_targeting` | sbTargeting | Sponsored Brands keyword or product target, day |
+| `sb_search_terms` | sbSearchTerm | search term, Sponsored Brands target, day |
+| `sb_purchased_products` | sbPurchasedProduct | product bought after a Sponsored Brands click, with `attributionType` (Promoted or Brand Halo) |
 
-Metrics in every preset: impressions, clicks, cost, purchases and sales at 1, 7 and 14
+Metrics in every `sp_*` preset: impressions, clicks, cost, purchases and sales at 1, 7 and 14
 days, units at 14 days, and Kindle Edition Normalized Pages read and royalties at 14
-days. `amazon_ads.REPORT_PRESETS` has the exact columns.
+days. Sponsored Brands has a single 14-day window, so `sb_*` presets carry impressions,
+clicks, cost, purchases, sales and units without a suffix; each SB report type accepts a
+different subset (only `sb_campaigns` has Kindle page columns). A Sponsored Brands sale
+can be any product of the brand, so use `sb_purchased_products` to see what was
+actually bought. `amazon_ads.REPORT_PRESETS` has the exact columns.
 
 ## Options
 
