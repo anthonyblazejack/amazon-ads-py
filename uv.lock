@@ -45,6 +45,7 @@ pandas = [
 dev = [
     { name = "click" },
     { name = "mcp" },
+    { name = "mkdocs" },
     { name = "mkdocs-material" },
     { name = "mkdocstrings", extra = ["python"] },
     { name = "mypy" },
@@ -71,6 +72,7 @@ provides-extras = ["cli", "mcp", "pandas", "all"]
 dev = [
     { name = "click", specifier = ">=8.1" },
     { name = "mcp", specifier = ">=2.0" },
+    { name = "mkdocs", specifier = ">=1.6,<2" },
     { name = "mkdocs-material", specifier = ">=9.5" },
     { name = "mkdocstrings", extras = ["python"], specifier = ">=0.26" },
     { name = "mypy", specifier = ">=1.11" },
