@@ -59,8 +59,12 @@ _METRICS_1_7_14 = [
 
 # Sponsored Brands reports have one fixed attribution window (14 days), so the metrics
 # carry no 1d/7d/14d suffix. Each SB report type accepts a different subset: sbTargeting
-# rejects the Kindle page columns and sbSearchTerm also rejects detailPageViews.
+# rejects the Kindle page columns and sbSearchTerm also rejects detailPageViews and the
+# new-to-brand columns.
 _SB_METRICS = ["impressions", "clicks", "cost", "purchases", "sales", "unitsSold"]
+# Amazon keeps 60 days of every Sponsored Brands report type; an older start date answers
+# 400 "must be equal to or after report type data retention start date".
+_SB_RETENTION_DAYS = 60
 
 
 @dataclass(frozen=True)
@@ -227,11 +231,14 @@ PRESETS: dict[str, ReportPreset] = {
             "topOfSearchImpressionShare",
             *_SB_METRICS,
             "detailPageViews",
+            "newToBrandPurchases",
+            "brandedSearches",
             "kindleEditionNormalizedPagesRead14d",
             "kindleEditionNormalizedPagesRoyalties14d",
         ),
         key_columns=("campaignId",),
         ad_product="SPONSORED_BRANDS",
+        retention_days=_SB_RETENTION_DAYS,
         description="One row per Sponsored Brands campaign per day. Sales count any "
         "product of the brand, not only the ones in the ad.",
     ),
@@ -257,9 +264,12 @@ PRESETS: dict[str, ReportPreset] = {
             "topOfSearchImpressionShare",
             *_SB_METRICS,
             "detailPageViews",
+            "newToBrandPurchases",
+            "brandedSearches",
         ),
         key_columns=("adGroupId", "targetingId"),
         ad_product="SPONSORED_BRANDS",
+        retention_days=_SB_RETENTION_DAYS,
         description="One row per Sponsored Brands keyword or product target per day. "
         "keywordBid is the bid at pull time.",
     ),
@@ -279,9 +289,7 @@ PRESETS: dict[str, ReportPreset] = {
             "searchTerm",
             *_SB_METRICS,
         ),
-        # Amazon does not document SB search-term retention; this assumes it matches the
-        # 65 days measured for Sponsored Products search terms.
-        retention_days=65,
+        retention_days=_SB_RETENTION_DAYS,
         key_columns=("adGroupId", "keywordId", "searchTerm"),
         ad_product="SPONSORED_BRANDS",
         description="One row per customer search term per Sponsored Brands target per day.",
@@ -308,6 +316,7 @@ PRESETS: dict[str, ReportPreset] = {
         ),
         key_columns=("campaignId", "adGroupId", "purchasedAsin", "attributionType"),
         ad_product="SPONSORED_BRANDS",
+        retention_days=_SB_RETENTION_DAYS,
         description="Every product bought within 14 days of a Sponsored Brands click, "
         "which can be any product of the brand. attributionType says whether it was in "
         "the ad (Promoted) or not (Brand Halo).",

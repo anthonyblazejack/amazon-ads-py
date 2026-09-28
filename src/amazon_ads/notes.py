@@ -67,6 +67,8 @@ API_NOTES = """\
 - Sponsored Brands report types accept different columns: sbTargeting rejects the Kindle
   page columns, sbSearchTerm also rejects detailPageViews, and SB metrics have no
   1d/7d/14d suffix except in sbPurchasedProduct.
+- Sponsored Brands reports keep 60 days for every report type; an older start date
+  answers 400 "must be equal to or after report type data retention start date".
 
 ## Sponsored Brands ids
 - The campaign id in an advertising console URL (a string starting with "A") is not the
