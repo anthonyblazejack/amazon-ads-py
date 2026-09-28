@@ -141,4 +141,6 @@ Differences from Sponsored Products, all handled for you:
 - **Archiving a keyword is one request per keyword** (`DELETE /sb/keywords/{keywordId}`);
   a keyword Amazon cannot find comes back as a per-item `NOT_FOUND` error, not an exception.
 - **Placement premiums live in `bidding`.** Send the whole `bidding` object on a campaign
-  update; change plans compare it as one field.
+  update; change plans compare it as one field. The object exactly as a read returns it
+  (four placements, although the spec says three) is accepted, so read it, change the
+  percentage and send it back.

@@ -81,9 +81,9 @@ Behavior of the live Amazon Ads API that its documentation and specs do not stat
   bidding.bidAdjustmentsByPlacement on /sb/v4/campaigns. The advertising console's
   campaign settings page does not show it.
 - A campaign read returns four bidAdjustmentsByPlacement entries (DETAIL_PAGE,
-  TOP_OF_SEARCH, HOME, OTHER), while the v4 spec caps an update request at three. Whether
-  Amazon accepts the four it returned has not been tested; send only the placements you
-  mean to set if an update is rejected.
+  TOP_OF_SEARCH, HOME, OTHER) plus bidOptimizationStrategy, while the v4 spec caps an
+  update request at three placements. Amazon accepts the object exactly as it was read,
+  with all four, and applies the changed percentage; a read-modify-write of bidding works.
 
 ## Profiles and regions
 - Profiles live on three regional hosts (NA, EU, FE). Australia and Japan are FE; the UK
