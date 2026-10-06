@@ -47,6 +47,8 @@ ENTITIES = {
     "product-ads": "product_ads",
     "portfolios": "portfolios",
     "sb-campaigns": "sb_campaigns",
+    "sb-ad-groups": "sb_ad_groups",
+    "sb-ads": "sb_ads",
     "sb-keywords": "sb_keywords",
     "sb-negative-keywords": "sb_negative_keywords",
 }
@@ -64,6 +66,8 @@ TABLE_COLUMNS = {
     "product_ads": ["adId", "adGroupId", "asin", "sku", "state"],
     "portfolios": ["portfolioId", "name", "state", "budget"],
     "sb_campaigns": ["campaignId", "name", "state", "budget", "bidding"],
+    "sb_ad_groups": ["adGroupId", "campaignId", "name", "state"],
+    "sb_ads": ["adId", "adGroupId", "name", "state", "creative"],
     "sb_keywords": ["keywordId", "adGroupId", "keywordText", "matchType", "state", "bid"],
     "sb_negative_keywords": ["keywordId", "adGroupId", "keywordText", "matchType", "state"],
 }

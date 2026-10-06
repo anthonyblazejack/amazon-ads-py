@@ -8,6 +8,15 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Sponsored Brands ad groups and ads: `ProfileClient.sb.ad_groups` and `sb.ads` (v4), so a
+  Sponsored Brands campaign can be built end to end rather than only updated. A campaign
+  needs an ad group and an ad to serve at all, and the API accepts a campaign without
+  either. Ads have no single create endpoint, one per format instead, so `sb.ads` takes an
+  `adFormat` field (default `productCollection`, the console's Collections layout), posts
+  to that format's endpoint and leaves the field out of the body; one call cannot mix
+  formats because Amazon numbers per-item results by their position in the request. The
+  MCP server's `list_entities`, `plan_update`, `plan_create` and `plan_archive` accept
+  `sb_ad_groups` and `sb_ads`, and `adsctl` accepts `sb-ad-groups` and `sb-ads`.
 - Sponsored Brands campaign management: `ProfileClient.sb.campaigns` (v4),
   `sb.keywords` and `sb.negative_keywords` (v3) with the same list, update, create,
   archive and change-plan interface as Sponsored Products. Plans, drift checks and

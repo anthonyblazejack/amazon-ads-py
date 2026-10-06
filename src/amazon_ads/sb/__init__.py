@@ -1,4 +1,5 @@
-"""Sponsored Brands campaign management: campaigns (v4), keywords and negative keywords (v3).
+"""Sponsored Brands campaign management: campaigns, ad groups and ads (v4), keywords and
+negative keywords (v3).
 
 Sponsored Brands campaigns (``/sb/v4/campaigns``) follow the same list, update and 207
 contract as Sponsored Products v3, so they reuse :class:`~amazon_ads.sp.resource.SpResource`
@@ -14,6 +15,10 @@ treat both products alike:
 * an update must carry the keyword's ``adGroupId`` and ``campaignId`` as well as its id,
 * archiving is ``DELETE /sb/keywords/{keywordId}``, one keyword per request,
 * ids are integers and states are lower case (``enabled``, ``paused``, ``archived``).
+
+Ad groups follow the shared v4 contract outright. Ads follow it for listing, updating and
+archiving, but not for creation: Amazon gives each ad format its own create endpoint, so
+:class:`SbAdsResource` routes a create by the item's ``adFormat``.
 """
 
 from __future__ import annotations
@@ -25,7 +30,7 @@ from typing import TYPE_CHECKING, Any
 
 from amazon_ads.batch import BatchResult
 from amazon_ads.errors import NotFoundError
-from amazon_ads.models import SbCampaign, SbKeyword, SbNegativeKeyword
+from amazon_ads.models import SbAd, SbAdGroup, SbCampaign, SbKeyword, SbNegativeKeyword
 from amazon_ads.sp.resource import (
     UNSET,
     EntityInput,
@@ -64,6 +69,76 @@ CAMPAIGNS = EntitySpec(
     max_batch=10,
     max_filter_ids=10,
 )
+
+
+AD_GROUPS = EntitySpec(
+    kind="sb.ad_groups",
+    path="/sb/v4/adGroups",
+    media_type="application/vnd.sbadgroupresource.v4+json",
+    collection_key="adGroups",
+    id_field="adGroupId",
+    id_filter="adGroupIdFilter",
+    model=SbAdGroup,
+    # An ad group carries no bid of its own: the bid lives on the campaign's keywords.
+    updatable=frozenset({"adGroupId", "name", "state"}),
+    max_batch=10,
+    max_filter_ids=10,
+)
+
+ADS = EntitySpec(
+    kind="sb.ads",
+    path="/sb/v4/ads",
+    media_type="application/vnd.sbadresource.v4+json",
+    collection_key="ads",
+    id_field="adId",
+    id_filter="adIdFilter",
+    model=SbAd,
+    updatable=frozenset({"adId", "name", "state", "creative", "landingPage"}),
+    max_batch=10,
+    max_filter_ids=10,
+)
+
+# The ad formats that have a create endpoint under /sb/v4/ads/{format}. The console calls
+# productCollection "Collections": a brand headline beside several of the brand's products.
+AD_FORMATS = (
+    "productCollection",
+    "productCollectionExtended",
+    "storeSpotlight",
+    "video",
+    "brandVideo",
+    "autoCollection",
+    "manualCollection",
+)
+DEFAULT_AD_FORMAT = "productCollection"
+
+
+class SbAdsResource(SpResource[SbAd]):
+    """Sponsored Brands ads (v4).
+
+    Listing, updating and archiving use the shared contract. Creation does not: there is
+    no ``POST /sb/v4/ads``, only one endpoint per ad format, so :meth:`create` posts to
+    ``/sb/v4/ads/{adFormat}`` and defaults to ``productCollection``.
+
+    Every item in one call must ask for the same format. Amazon reports per-item results
+    by their position in the request, so splitting one call across two endpoints would
+    renumber them; callers with two formats make two calls.
+    """
+
+    def create(self, items: Sequence[EntityInput]) -> BatchResult[dict[str, Any]]:
+        payloads = [_to_payload(item) for item in items]
+        formats = {str(p.pop("adFormat", None) or DEFAULT_AD_FORMAT) for p in payloads}
+        if len(formats) > 1:
+            raise ValueError(
+                "one create call cannot mix Sponsored Brands ad formats "
+                f"({', '.join(sorted(formats))}); send one call per format"
+            )
+        ad_format = formats.pop() if formats else DEFAULT_AD_FORMAT
+        if ad_format not in AD_FORMATS:
+            raise ValueError(
+                f"unknown Sponsored Brands ad format {ad_format!r}; "
+                f"expected one of {', '.join(AD_FORMATS)}"
+            )
+        return self._write("POST", f"{self.spec.path}/{ad_format}", payloads)
 
 
 @dataclass(frozen=True)
@@ -260,11 +335,18 @@ def _normalize(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 class SponsoredBrands:
-    """Sponsored Brands resources for one profile: ``campaigns`` (v4), ``keywords`` and
-    ``negative_keywords`` (v3)."""
+    """Sponsored Brands resources for one profile: ``campaigns``, ``ad_groups`` and ``ads``
+    (v4), ``keywords`` and ``negative_keywords`` (v3).
+
+    A campaign that can serve needs all three v4 pieces: the campaign, one ad group under
+    it, and one ad under that carrying the creative and landing page. A campaign on its own
+    is accepted by the API and never serves.
+    """
 
     def __init__(self, client: ProfileClient) -> None:
         self.campaigns: SpResource[SbCampaign] = SpResource(client, CAMPAIGNS)
+        self.ad_groups: SpResource[SbAdGroup] = SpResource(client, AD_GROUPS)
+        self.ads: SbAdsResource = SbAdsResource(client, ADS)
         self.keywords: SbV3Resource = SbV3Resource(client, KEYWORDS)
         self.negative_keywords: SbV3Resource = SbV3Resource(client, NEGATIVE_KEYWORDS)
 
@@ -273,12 +355,30 @@ def resource_for(client: ProfileClient, kind: str) -> SpResource[Any] | None:
     """The Sponsored Brands resource behind a change plan's ``kind``, or ``None``."""
     if kind == CAMPAIGNS.kind:
         return SpResource(client, CAMPAIGNS)
+    if kind == AD_GROUPS.kind:
+        return SpResource(client, AD_GROUPS)
+    if kind == ADS.kind:
+        return SbAdsResource(client, ADS)
     for spec in (KEYWORDS, NEGATIVE_KEYWORDS):
         if spec.kind == kind:
             return SbV3Resource(client, spec)
     return None
 
 
-ALL_SPECS: tuple[EntitySpec[Any], ...] = (CAMPAIGNS, KEYWORDS, NEGATIVE_KEYWORDS)
+ALL_SPECS: tuple[EntitySpec[Any], ...] = (
+    CAMPAIGNS,
+    AD_GROUPS,
+    ADS,
+    KEYWORDS,
+    NEGATIVE_KEYWORDS,
+)
 
-__all__ = ["ALL_SPECS", "SbV3Resource", "SponsoredBrands", "resource_for"]
+__all__ = [
+    "AD_FORMATS",
+    "ALL_SPECS",
+    "DEFAULT_AD_FORMAT",
+    "SbAdsResource",
+    "SbV3Resource",
+    "SponsoredBrands",
+    "resource_for",
+]

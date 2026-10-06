@@ -40,8 +40,9 @@ adsctl list ENTITY -m MARKET [--campaign-id ID]... [--ad-group-id ID]... [--id I
 
 `ENTITY`: `campaigns`, `ad-groups`, `keywords`, `targets`, `negative-keywords`,
 `negative-targets`, `campaign-negative-keywords`, `campaign-negative-targets`,
-`product-ads`, `portfolios`, and for Sponsored Brands `sb-campaigns`, `sb-keywords`,
-`sb-negative-keywords`. Table output shows key columns; `--json` shows every field.
+`product-ads`, `portfolios`, and for Sponsored Brands `sb-campaigns`, `sb-ad-groups`,
+`sb-ads`, `sb-keywords`, `sb-negative-keywords`. Table output shows key columns; `--json`
+shows every field.
 
 ## bids
 

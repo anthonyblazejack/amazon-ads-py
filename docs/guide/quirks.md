@@ -85,6 +85,19 @@ Behavior of the live Amazon Ads API that its documentation and specs do not stat
   update request at three placements. Amazon accepts the object exactly as it was read,
   with all four, and applies the changed percentage; a read-modify-write of bidding works.
 
+## Sponsored Brands ad groups and ads
+- A campaign on its own never serves. A Sponsored Brands campaign needs an ad group under
+  it and an ad under that, and the API accepts the campaign without either, so a campaign
+  created on its own looks healthy in a list and delivers nothing.
+- There is no POST /sb/v4/ads. Each ad format has its own create endpoint
+  (/sb/v4/ads/productCollection, /sb/v4/ads/storeSpotlight, /sb/v4/ads/video and so on),
+  while listing, updating and archiving share /sb/v4/ads. This client's sb.ads takes an
+  adFormat field, posts to that format's endpoint and does not send adFormat in the body.
+- An ad group takes no bid. The bid lives on the campaign's keywords, so an ad group is
+  only a name, a state and its campaign id.
+- The creative and landing page belong to the ad, not the campaign, so changing which
+  products an ad shows is an ad update and never a campaign update.
+
 ## Profiles and regions
 - Profiles live on three regional hosts (NA, EU, FE). Australia and Japan are FE; the UK
   and India are EU. One consent through amazon.com can cover all three.

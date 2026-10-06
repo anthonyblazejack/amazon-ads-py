@@ -269,6 +269,47 @@ class SbNegativeKeyword(ApiModel):
     state: str | None = None
 
 
+class SbAdGroup(ApiModel):
+    """A Sponsored Brands ad group (v4).
+
+    A Sponsored Brands campaign holds one ad group, and the ad and its creative hang off
+    that ad group, so creating a working campaign means creating all three. Ids are
+    strings and ``state`` is upper case (``ENABLED``), like v4 campaigns and unlike the
+    v3 keywords.
+    """
+
+    ad_group_id: str | None = None
+    campaign_id: str | None = None
+    name: str | None = None
+    state: str | None = None
+    extended_data: dict[str, Any] | None = None
+
+
+class SbAd(ApiModel):
+    """A Sponsored Brands ad (v4): the creative plus the page the click lands on.
+
+    ``ad_format`` is not an Amazon field. Amazon has no single create endpoint for ads;
+    each format posts to its own (``POST /sb/v4/ads/productCollection``), so this field
+    chooses which, and is dropped from the payload before sending. ``productCollection``
+    is the format the advertising console calls Collections.
+
+    ``creative`` carries the brand name, the headline and the ASINs the ad shows;
+    ``landing_page`` carries a ``pageType`` plus either its own ``asins`` or a Store
+    ``url``. Both are passed through as Amazon spells them, because the fields each
+    format accepts differ.
+    """
+
+    ad_id: str | None = None
+    ad_group_id: str | None = None
+    campaign_id: str | None = None
+    name: str | None = None
+    state: str | None = None
+    ad_format: str | None = None
+    creative: dict[str, Any] | None = None
+    landing_page: dict[str, Any] | None = None
+    extended_data: dict[str, Any] | None = None
+
+
 # --- Bid recommendations ------------------------------------------------------------------
 
 

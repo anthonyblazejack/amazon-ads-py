@@ -56,6 +56,8 @@ ENTITIES = (
     "product_ads",
     "portfolios",
     "sb_campaigns",
+    "sb_ad_groups",
+    "sb_ads",
     "sb_keywords",
     "sb_negative_keywords",
 )
@@ -165,7 +167,8 @@ class AdsTools:
 
         entity: campaigns, ad_groups, keywords, targets, negative_keywords,
         negative_targets, campaign_negative_keywords, campaign_negative_targets,
-        product_ads, portfolios, sb_campaigns, sb_keywords or sb_negative_keywords.
+        product_ads, portfolios, sb_campaigns, sb_ad_groups, sb_ads, sb_keywords or
+        sb_negative_keywords.
         States default to enabled and paused (enabled only for sb_negative_keywords);
         include_archived lists every state. Sponsored Brands keyword states are lower
         case. text_contains filters keywords, names and ASINs case-insensitively after
@@ -177,7 +180,12 @@ class AdsTools:
             kwargs["ids"] = ids
         if campaign_ids and entity != "portfolios":
             kwargs["campaign_ids"] = campaign_ids
-        if ad_group_ids and entity not in {"portfolios", "campaigns", "sb_campaigns"}:
+        if ad_group_ids and entity not in {
+            "portfolios",
+            "campaigns",
+            "sb_campaigns",
+            "sb_ad_groups",
+        }:
             kwargs["ad_group_ids"] = ad_group_ids
         if include_archived:
             kwargs["states"] = None
@@ -408,7 +416,15 @@ class AdsTools:
         """Build (not apply) a create, e.g. keywords [{"campaignId", "adGroupId",
         "keywordText", "matchType": "EXACT", "bid": 0.5, "state": "ENABLED"}], or
         sb_negative_keywords [{"campaignId", "adGroupId", "keywordText",
-        "matchType": "negativeExact"}] (Sponsored Brands match types are camelCase)."""
+        "matchType": "negativeExact"}] (Sponsored Brands match types are camelCase).
+
+        A Sponsored Brands campaign only serves once all three v4 pieces exist, created in
+        order: sb_campaigns, then sb_ad_groups [{"campaignId", "name", "state"}], then
+        sb_ads [{"adGroupId", "name", "state", "adFormat": "productCollection",
+        "creative": {"brandName", "headline", "asins"},
+        "landingPage": {"pageType": "DETAIL_PAGE", "asins"}}]. adFormat picks the create
+        endpoint and defaults to productCollection, the console's Collections layout; one
+        call cannot mix formats."""
         plan = self._resource(market, entity).plan_create(items, note=note)
         return self._present(plan)
 

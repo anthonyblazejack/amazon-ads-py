@@ -105,12 +105,14 @@ To review changes before sending them, and to be able to undo them, use
 
 ## Sponsored Brands
 
-Sponsored Brands campaigns, keywords and negative keywords have the same interface, under
-`ProfileClient.sb`:
+Sponsored Brands campaigns, ad groups, ads, keywords and negative keywords have the same
+interface, under `ProfileClient.sb`:
 
 | Resource | Model | Id field | Amazon API |
 |---|---|---|---|
 | `sb.campaigns` | `SbCampaign` | `campaignId` | v4 (`/sb/v4/campaigns`) |
+| `sb.ad_groups` | `SbAdGroup` | `adGroupId` | v4 (`/sb/v4/adGroups`) |
+| `sb.ads` | `SbAd` | `adId` | v4 (`/sb/v4/ads`) |
 | `sb.keywords` | `SbKeyword` | `keywordId` | v3 (`/sb/keywords`) |
 | `sb.negative_keywords` | `SbNegativeKeyword` | `keywordId` | v3 (`/sb/negativeKeywords`) |
 
@@ -128,6 +130,48 @@ us.sb.campaigns.update([{"campaignId": "303", "bidding": {
 plan = us.sb.keywords.plan_update([{"keywordId": "101", "bid": 0.95}])   # plans work too
 ```
 
+### Building a campaign that serves
+
+A campaign on its own never delivers. It needs an ad group, and an ad under that carrying
+the creative and the landing page. Amazon accepts the campaign without either, so the
+missing pieces do not show up as an error, only as a campaign that spends nothing:
+
+```python
+campaign = us.sb.campaigns.create([{
+    "name": "Mysteries", "state": "PAUSED", "budget": 10, "budgetType": "DAILY",
+    "startDate": "2026-01-01", "goal": "PAGE_VISIT", "costType": "CPC",
+}])
+campaign_id = campaign.successes[0].id
+
+group = us.sb.ad_groups.create([
+    {"campaignId": campaign_id, "name": "Mysteries", "state": "ENABLED"},
+])
+ad_group_id = group.successes[0].id
+
+us.sb.ads.create([{
+    "adGroupId": ad_group_id,
+    "name": "Mysteries",
+    "state": "ENABLED",
+    "adFormat": "productCollection",          # the console calls this Collections
+    "creative": {
+        "brandName": "Invented Books",
+        "headline": "Three mysteries to start with",
+        "asins": ["B000000001", "B000000002", "B000000003"],
+    },
+    "landingPage": {"pageType": "DETAIL_PAGE", "asins": ["B000000001"]},
+}])
+```
+
+`adFormat` is not an Amazon field. There is no `POST /sb/v4/ads`: each format has its own
+create endpoint, so the field picks one and is left out of the body. It defaults to
+`productCollection`. One `create` call cannot mix formats, because Amazon numbers per-item
+results by their position in the request, so two endpoints would renumber them; send one
+call per format. Listing, updating and archiving ads all use the shared `/sb/v4/ads`.
+
+An ad group takes no bid: the bid lives on the campaign's keywords, so an ad group is only
+a name, a state and its campaign id. The creative and landing page belong to the ad, so
+changing which products an ad shows is an ad update, never a campaign update.
+
 Differences from Sponsored Products, all handled for you:
 
 - **Keywords are on the older v3 API.** Ids are integers and states and match types are
@@ -135,7 +179,8 @@ Differences from Sponsored Products, all handled for you:
   `negativePhrase`. Pass states in either case; they are sent lower case.
 - **An update must repeat the keyword's parent ids.** Amazon requires `adGroupId` and
   `campaignId` next to `keywordId`; they are read from the account when you leave them out.
-- **Smaller batches.** Keyword writes go 100 at a time, campaign writes 10 at a time.
+- **Smaller batches.** Keyword writes go 100 at a time; campaign, ad group and ad writes
+  10 at a time.
 - **Negative keywords cannot be paused.** They are `enabled` or `archived`; `list()` shows
   enabled ones unless you pass `states=None`.
 - **Archiving a keyword is one request per keyword** (`DELETE /sb/keywords/{keywordId}`);

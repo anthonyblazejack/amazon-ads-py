@@ -213,5 +213,127 @@ def test_campaign_updates_respect_the_v4_limit_of_ten(
 
 
 def test_unknown_entity_names_list_the_sponsored_brands_ones(tools: AdsTools) -> None:
+    # sb_billboards is not an entity. sb_ads and sb_ad_groups are, so they cannot stand in
+    # for an unknown name here.
     with pytest.raises(ValueError, match="sb_negative_keywords"):
-        tools.plan_update("US", "sb_ads", [])
+        tools.plan_update("US", "sb_billboards", [])
+
+
+# --- ad groups and ads (v4) ---------------------------------------------------------------
+
+# Invented ids, ASINs and copy. Nothing here comes from a real account.
+AD_GROUP = {"adGroupId": "404", "campaignId": "303", "name": "mystery ad group", "state": "ENABLED"}
+AD_CREATIVE = {
+    "brandName": "Invented Books",
+    "headline": "Three mysteries to start with",
+    "asins": ["B000000001", "B000000002", "B000000003"],
+}
+
+
+def test_ad_group_create_posts_to_the_shared_v4_path(
+    api: respx.MockRouter, us: ProfileClient
+) -> None:
+    post = api.post(f"{NA}/sb/v4/adGroups").mock(
+        return_value=Response(
+            207, json={"adGroups": {"success": [{"index": 0, "adGroupId": "404"}], "error": []}}
+        )
+    )
+    result = us.sb.ad_groups.create([AD_GROUP])
+    assert result.ok
+    assert result.successes[0].id == "404"
+    assert json.loads(post.calls.last.request.content) == {"adGroups": [AD_GROUP]}
+    assert post.calls.last.request.headers["Content-Type"] == (
+        "application/vnd.sbadgroupresource.v4+json"
+    )
+
+
+def test_ad_create_posts_to_the_endpoint_for_its_format_and_drops_ad_format(
+    api: respx.MockRouter, us: ProfileClient
+) -> None:
+    post = api.post(f"{NA}/sb/v4/ads/productCollection").mock(
+        return_value=Response(
+            207, json={"ads": {"success": [{"index": 0, "adId": "505"}], "error": []}}
+        )
+    )
+    result = us.sb.ads.create(
+        [
+            {
+                "adGroupId": "404",
+                "name": "mystery ad",
+                "state": "ENABLED",
+                "adFormat": "productCollection",
+                "creative": AD_CREATIVE,
+                "landingPage": {"pageType": "DETAIL_PAGE", "asins": ["B000000001"]},
+            }
+        ]
+    )
+    assert result.ok
+    assert result.successes[0].id == "505"
+    sent = json.loads(post.calls.last.request.content)["ads"][0]
+    # adFormat chooses the endpoint and is not a field Amazon accepts in the body.
+    assert "adFormat" not in sent
+    assert sent["creative"] == AD_CREATIVE
+    assert post.calls.last.request.headers["Content-Type"] == (
+        "application/vnd.sbadresource.v4+json"
+    )
+
+
+def test_ad_create_defaults_to_the_collections_format(
+    api: respx.MockRouter, us: ProfileClient
+) -> None:
+    post = api.post(f"{NA}/sb/v4/ads/productCollection").mock(
+        return_value=Response(207, json={"ads": {"success": [{"index": 0, "adId": "505"}]}})
+    )
+    us.sb.ads.create([{"adGroupId": "404", "name": "mystery ad", "state": "ENABLED"}])
+    assert post.called
+
+
+def test_ad_create_refuses_to_mix_formats_because_207_indexes_are_per_request(
+    us: ProfileClient,
+) -> None:
+    with pytest.raises(ValueError, match="one call per format"):
+        us.sb.ads.create(
+            [
+                {"adGroupId": "404", "adFormat": "productCollection"},
+                {"adGroupId": "404", "adFormat": "storeSpotlight"},
+            ]
+        )
+
+
+def test_ad_create_rejects_a_format_with_no_endpoint(us: ProfileClient) -> None:
+    with pytest.raises(ValueError, match="unknown Sponsored Brands ad format"):
+        us.sb.ads.create([{"adGroupId": "404", "adFormat": "billboard"}])
+
+
+def test_ad_update_and_list_use_the_shared_v4_contract(
+    api: respx.MockRouter, us: ProfileClient
+) -> None:
+    listed = api.post(f"{NA}/sb/v4/ads/list").mock(
+        return_value=Response(200, json={"ads": [{"adId": "505", "adGroupId": "404"}]})
+    )
+    assert [a.ad_id for a in us.sb.ads.list()] == ["505"]
+    assert listed.called
+
+    put = api.put(f"{NA}/sb/v4/ads").mock(
+        return_value=Response(207, json={"ads": {"success": [{"index": 0, "adId": "505"}]}})
+    )
+    result = us.sb.ads.update([{"adId": "505", "state": "PAUSED", "adGroupId": "404"}])
+    assert result.ok
+    # adGroupId is not updatable on an ad and is dropped rather than sent and rejected.
+    assert json.loads(put.calls.last.request.content) == {
+        "ads": [{"adId": "505", "state": "PAUSED"}]
+    }
+
+
+def test_the_mcp_server_lists_sponsored_brands_ad_groups_and_ads(
+    api: respx.MockRouter, tools: AdsTools
+) -> None:
+    api.post(f"{NA}/sb/v4/adGroups/list").mock(
+        return_value=Response(200, json={"adGroups": [AD_GROUP]})
+    )
+    assert tools.list_entities("US", "sb_ad_groups")["sb_ad_groups"][0]["adGroupId"] == "404"
+
+    api.post(f"{NA}/sb/v4/ads/list").mock(
+        return_value=Response(200, json={"ads": [{"adId": "505", "adGroupId": "404"}]})
+    )
+    assert tools.list_entities("US", "sb_ads")["sb_ads"][0]["adId"] == "505"
