@@ -337,3 +337,47 @@ def test_the_mcp_server_lists_sponsored_brands_ad_groups_and_ads(
         return_value=Response(200, json={"ads": [{"adId": "505", "adGroupId": "404"}]})
     )
     assert tools.list_entities("US", "sb_ads")["sb_ads"][0]["adId"] == "505"
+
+
+def test_keyword_create_drops_state_because_the_endpoint_refuses_it(
+    api: respx.MockRouter, us: ProfileClient
+) -> None:
+    post = api.post(f"{NA}/sb/keywords").mock(
+        return_value=Response(207, json=[{"code": "SUCCESS", "keywordId": 101}])
+    )
+    result = us.sb.keywords.create(
+        [
+            {
+                "campaignId": 303,
+                "adGroupId": 202,
+                "keywordText": "mystery novels",
+                "matchType": "phrase",
+                "bid": 0.95,
+                "state": "enabled",
+            }
+        ]
+    )
+    assert result.ok
+    # POST /sb/keywords answers INVALID_ARGUMENT when state is sent, and a created keyword
+    # is enabled anyway, so state is dropped rather than passed through to be rejected.
+    sent = json.loads(post.calls.last.request.content)[0]
+    assert "state" not in sent
+    assert sent["keywordText"] == "mystery novels"
+
+
+def test_negative_keyword_create_also_drops_state(api: respx.MockRouter, us: ProfileClient) -> None:
+    post = api.post(f"{NA}/sb/negativeKeywords").mock(
+        return_value=Response(207, json=[{"code": "SUCCESS", "keywordId": 909}])
+    )
+    us.sb.negative_keywords.create(
+        [
+            {
+                "campaignId": 303,
+                "adGroupId": 202,
+                "keywordText": "free pdf",
+                "matchType": "negativeExact",
+                "state": "enabled",
+            }
+        ]
+    )
+    assert "state" not in json.loads(post.calls.last.request.content)[0]

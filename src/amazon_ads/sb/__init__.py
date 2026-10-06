@@ -150,6 +150,11 @@ class SbV3Spec(EntitySpec[Any]):
     # Negative keywords take a single state per request; keywords take a comma list.
     single_state_filter: bool = False
     page_size: int = 500
+    # Fields the create endpoint rejects outright, even though a read returns them and an
+    # update accepts them. POST /sb/keywords answers INVALID_ARGUMENT "The noted field is
+    # not allowed with this API endpoint : state" when state is sent; a created keyword is
+    # enabled regardless.
+    create_forbidden: frozenset[str] = frozenset({"state"})
 
 
 KEYWORDS = SbV3Spec(
@@ -256,7 +261,18 @@ class SbV3Resource(SpResource[Any]):
     # --- writes -------------------------------------------------------------------------
 
     def create(self, items: Sequence[EntityInput]) -> BatchResult[dict[str, Any]]:
-        payloads = [_normalize(_to_payload(item)) for item in items]
+        """Create keywords or negative keywords.
+
+        Drops the fields the create endpoint refuses, the same way :meth:`update` drops
+        fields Amazon treats as read-only, rather than passing them through to be
+        rejected.
+        """
+        payloads = []
+        for item in items:
+            payload = _normalize(_to_payload(item))
+            for field in self.spec.create_forbidden:
+                payload.pop(field, None)
+            payloads.append(payload)
         return self._write("POST", self.spec.path, payloads)
 
     def update(self, items: Sequence[EntityInput]) -> BatchResult[dict[str, Any]]:

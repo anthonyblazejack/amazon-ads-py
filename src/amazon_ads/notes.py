@@ -89,6 +89,19 @@ API_NOTES = """\
   update request at three placements. Amazon accepts the object exactly as it was read,
   with all four, and applies the changed percentage; a read-modify-write of bidding works.
 
+## Sponsored Brands creates that the specs do not warn about
+- POST /sb/keywords and POST /sb/negativeKeywords reject state: INVALID_ARGUMENT "The
+  noted field is not allowed with this API endpoint : state", even though a read returns
+  it and an update accepts it. A created keyword is enabled. This client drops the field.
+- A KDP author account cannot create a goal based campaign through the API:
+  INVALID_ARGUMENT AUTHOR_CREATED_GOAL_CAMPAIGNS_DISABLED, "Author not authorized to
+  create a goal based campaign". Omit goal and costType. Amazon then fills in goal
+  PAGE_VISIT, costType CPC and kpi CLICKS itself, which is what a campaign made in the
+  advertising console carries, so nothing is lost by leaving them out.
+- For the manualCollection ad format the landing page nests inside creative on create,
+  while a read returns landingPage at the ad level. Sending it at the ad level on create
+  is rejected.
+
 ## Sponsored Brands ad groups and ads
 - A campaign on its own never serves. A Sponsored Brands campaign needs an ad group under
   it and an ad under that, and the API accepts the campaign without either, so a campaign

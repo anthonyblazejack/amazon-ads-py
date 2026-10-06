@@ -8,6 +8,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `sb.keywords.create` and `sb.negative_keywords.create` drop `state`. Both endpoints
+  reject it outright, although a read returns it and an update accepts it, and a created
+  keyword is enabled anyway. `SbV3Spec.create_forbidden` holds the fields a create must
+  not send.
 - Sponsored Brands ad groups and ads: `ProfileClient.sb.ad_groups` and `sb.ads` (v4), so a
   Sponsored Brands campaign can be built end to end rather than only updated. A campaign
   needs an ad group and an ad to serve at all, and the API accepts a campaign without
