@@ -66,6 +66,30 @@ Inputs can be dicts in camelCase or snake_case, or models (`Keyword(...)`).
   instead when you might want it back.
 - **New campaigns bid dynamically by default.** Amazon uses "dynamic bids, down only"
   unless you send `"dynamicBidding": {"strategy": "MANUAL"}`.
+- **A Sponsored Products campaign budget may be given as a number.** Amazon only accepts
+  it as an object, and rejects a bare number with a 400 that names no field, so
+  `{"campaignId": "9", "budget": 20}` is widened to
+  `{"budget": 20.0, "budgetType": "DAILY"}` before it is sent. Pass the object yourself
+  to set anything other than a daily budget. A value that is neither a number nor an
+  object raises instead of being sent.
+
+```python
+us.sp.campaigns.update([{"campaignId": "9", "budget": 20}])          # DAILY 20.00
+us.sp.campaigns.update([{"campaignId": "9", "budget":                # or be explicit
+    {"budget": 500, "budgetType": "LIFETIME"}}])
+```
+
+The budget may be written `budgetType` or `budget_type`, or passed as a `Budget(...)`.
+
+`plan_update` reads the campaign first, so it keeps the `budgetType` the campaign already
+has: planning `"budget": 800` on a lifetime-budget campaign plans a lifetime budget of
+800, not a switch to daily. `update` and `create` read nothing back and cannot know the
+current type, so a bare number there always means a daily budget; pass the object to say
+otherwise. `plan_create` widens the budget as well, so the plan you approve is the request
+that gets sent, and a budget that is neither a number, a mapping nor a `Budget` is refused
+while the plan is built rather than part way through applying it.
+
+A Sponsored Brands campaign is the other way round, see below.
 
 ## Batch results
 
@@ -171,6 +195,10 @@ call per format. Listing, updating and archiving ads all use the shared `/sb/v4/
 An ad group takes no bid: the bid lives on the campaign's keywords, so an ad group is only
 a name, a state and its campaign id. The creative and landing page belong to the ad, so
 changing which products an ad shows is an ad update, never a campaign update.
+
+A Sponsored Brands campaign holds its budget as a plain number beside a sibling
+`budgetType`, not as the object a Sponsored Products campaign uses, so `"budget": 20` is
+already the right shape here and is sent untouched.
 
 Differences from Sponsored Products, all handled for you:
 

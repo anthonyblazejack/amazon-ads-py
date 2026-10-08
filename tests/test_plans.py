@@ -142,3 +142,94 @@ def test_save_to_a_new_directory_puts_the_plan_inside_it(tmp_path) -> None:  # t
     path = plan.save(tmp_path / "rollbacks")
     assert path == tmp_path / "rollbacks" / f"plan-{plan.id}.json"
     assert ChangePlan.load(path).changes == plan.changes
+
+
+def campaign_list(api: respx.MockRouter, budget: dict[str, object]) -> None:
+    api.post(f"{NA}/sp/campaigns/list").mock(
+        return_value=Response(
+            200, json={"campaigns": [{"campaignId": "9", "name": "Mysteries", "budget": budget}]}
+        )
+    )
+
+
+def test_a_number_budget_plans_the_object_amazon_requires_on_both_sides(
+    api: respx.MockRouter, us: ProfileClient
+) -> None:
+    # A plan whose before was an object and whose after was a bare number was built
+    # happily and then rejected by Amazon with a 400 that named no field. The mismatched
+    # shapes in the table were the only clue, so the plan must show both the same way.
+    campaign_list(api, {"budget": 10.0, "budgetType": "DAILY"})
+    plan = us.sp.campaigns.plan_update([{"campaignId": "9", "budget": 20}])
+    [row] = plan.table()
+    assert row["before"] == {"budget": 10.0, "budgetType": "DAILY"}
+    assert row["after"] == {"budget": 20.0, "budgetType": "DAILY"}
+
+    route = api.put(f"{NA}/sp/campaigns").mock(
+        return_value=Response(
+            207, json={"campaigns": {"success": [{"index": 0, "campaignId": "9"}]}}
+        )
+    )
+    plan.apply(us)
+    [campaign] = json.loads(route.calls.last.request.content)["campaigns"]
+    assert campaign == {"campaignId": "9", "budget": {"budget": 20.0, "budgetType": "DAILY"}}
+
+
+def test_a_number_budget_keeps_the_campaigns_own_budget_type(
+    api: respx.MockRouter, us: ProfileClient
+) -> None:
+    # Defaulting to DAILY here would quietly turn a lifetime budget into a daily one.
+    campaign_list(api, {"budget": 500.0, "budgetType": "LIFETIME"})
+    plan = us.sp.campaigns.plan_update([{"campaignId": "9", "budget": 800}])
+    [change] = plan.changes
+    assert change.after == {"budget": {"budget": 800.0, "budgetType": "LIFETIME"}}
+
+
+def test_a_number_budget_equal_to_the_current_one_plans_nothing(
+    api: respx.MockRouter, us: ProfileClient
+) -> None:
+    # The scalar must be compared in the coerced shape, or every budget would look changed.
+    campaign_list(api, {"budget": 10.0, "budgetType": "DAILY"})
+    assert us.sp.campaigns.plan_update([{"campaignId": "9", "budget": 10}]).changes == []
+
+
+def test_a_budget_plan_reverses_to_the_whole_object(
+    api: respx.MockRouter, us: ProfileClient
+) -> None:
+    campaign_list(api, {"budget": 10.0, "budgetType": "DAILY"})
+    plan = us.sp.campaigns.plan_update([{"campaignId": "9", "budget": 20}])
+    [change] = plan.inverse().changes
+    assert change.after == {"budget": {"budget": 10.0, "budgetType": "DAILY"}}
+
+
+def test_plan_create_plans_the_budget_shape_it_will_send(
+    api: respx.MockRouter, us: ProfileClient
+) -> None:
+    # A plan that showed a bare number and then sent an object would put the same
+    # plan-versus-request mismatch back, one approval step earlier.
+    plan = us.sp.campaigns.plan_create([{"name": "Mysteries", "state": "PAUSED", "budget": 15}])
+    [row] = [r for r in plan.table() if r["field"] == "budget"]
+    assert row["after"] == {"budget": 15.0, "budgetType": "DAILY"}
+
+    route = api.post(f"{NA}/sp/campaigns").mock(
+        return_value=Response(
+            207, json={"campaigns": {"success": [{"index": 0, "campaignId": "9"}]}}
+        )
+    )
+    plan.apply(us)
+    [campaign] = json.loads(route.calls.last.request.content)["campaigns"]
+    assert campaign["budget"] == row["after"]
+
+
+def test_plan_create_refuses_an_impossible_budget_before_approval(us: ProfileClient) -> None:
+    with pytest.raises(ValueError, match=r"sp\.campaigns budget takes a number"):
+        us.sp.campaigns.plan_create([{"name": "Mysteries", "budget": ["15"]}])
+
+
+def test_plan_update_refuses_a_budget_object_with_no_amount(
+    api: respx.MockRouter, us: ProfileClient
+) -> None:
+    # plan_update is the path the MCP server and the CLI take, so it has to refuse as
+    # well, rather than planning a budget Amazon would answer with a bare 400.
+    campaign_list(api, {"budget": 10.0, "budgetType": "DAILY"})
+    with pytest.raises(ValueError, match=r"sp\.campaigns budget is not a valid Budget"):
+        us.sp.campaigns.plan_update([{"campaignId": "9", "budget": {"budgetType": "LIFETIME"}}])

@@ -21,6 +21,12 @@ Behavior of the live Amazon Ads API that its documentation and specs do not stat
   Pause instead when the change might need undoing.
 - New SP campaigns default to dynamic bids "down only" unless dynamicBidding.strategy is
   sent; send "MANUAL" for fixed bids.
+- An SP campaign budget must be sent as an object, {"budget": 20.0, "budgetType":
+  "DAILY"}. A bare number is answered with a 400 for the whole request that names no
+  field, not a per-item 207 error. The two products disagree here: an SB campaign
+  (/sb/v4/campaigns) stores the same budget as a plain number beside a sibling
+  budgetType, and a number is what it wants. This client widens a number to the object
+  for SP campaigns and leaves SB campaign budgets alone.
 - Negative keywords are updated by keywordId but reported in 207 results as
   negativeKeywordId (campaign negatives: campaignNegativeKeywordId).
 

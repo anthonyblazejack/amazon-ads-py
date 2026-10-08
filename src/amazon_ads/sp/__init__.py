@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 
 from amazon_ads.models import (
     AdGroup,
+    Budget,
     Campaign,
     CampaignNegativeKeyword,
     CampaignNegativeTarget,
@@ -20,7 +21,7 @@ from amazon_ads.models import (
     ProductAd,
     Target,
 )
-from amazon_ads.sp.resource import EntitySpec, SpResource
+from amazon_ads.sp.resource import EntitySpec, ObjectField, SpResource
 
 if TYPE_CHECKING:
     from amazon_ads.client import ProfileClient
@@ -49,6 +50,9 @@ CAMPAIGNS = EntitySpec(
             "offAmazonSettings",
         }
     ),
+    # A campaign budget is an object here. Amazon rejects a bare number with a 400 that
+    # names no field, so "budget": 20 is widened to {"budget": 20.0, "budgetType": ...}.
+    object_fields={"budget": ObjectField(model=Budget, value_key="budget")},
 )
 
 AD_GROUPS = EntitySpec(
@@ -184,4 +188,4 @@ class SponsoredProducts:
         self.product_ads = SpResource(client, PRODUCT_ADS)
 
 
-__all__ = ["ALL_SPECS", "EntitySpec", "SpResource", "SponsoredProducts"]
+__all__ = ["ALL_SPECS", "EntitySpec", "ObjectField", "SpResource", "SponsoredProducts"]

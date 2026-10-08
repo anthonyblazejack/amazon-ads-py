@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import json
 
+import pytest
 import respx
 from httpx import Request, Response
 
 from amazon_ads import Keyword, ProfileClient
+from amazon_ads.models import Budget
 from tests.conftest import NA
 
 
@@ -216,3 +218,140 @@ def test_create_is_not_resent_after_an_internal_error(
     result = us.sp.keywords.create([{"campaignId": "1", "adGroupId": "2", "keywordText": "x"}])
     assert route.call_count == 1
     assert "check whether it exists" in result.errors[0].hint
+
+
+def test_sp_campaign_budget_given_as_a_number_is_sent_as_the_object_amazon_requires(
+    api: respx.MockRouter, us: ProfileClient
+) -> None:
+    # Amazon rejects {"budget": 20} on PUT /sp/campaigns with a 400 that names no field.
+    route = api.put(f"{NA}/sp/campaigns").mock(
+        return_value=Response(
+            207, json={"campaigns": {"success": [{"index": 0, "campaignId": "9"}]}}
+        )
+    )
+    us.sp.campaigns.update([{"campaignId": "9", "budget": 20}])
+    sent = json.loads(route.calls.last.request.content)
+    assert sent == {
+        "campaigns": [{"campaignId": "9", "budget": {"budget": 20.0, "budgetType": "DAILY"}}]
+    }
+
+
+def test_sp_campaign_create_sends_a_number_budget_as_an_object_too(
+    api: respx.MockRouter, us: ProfileClient
+) -> None:
+    route = api.post(f"{NA}/sp/campaigns").mock(
+        return_value=Response(
+            207, json={"campaigns": {"success": [{"index": 0, "campaignId": "9"}]}}
+        )
+    )
+    us.sp.campaigns.create([{"name": "Mysteries", "state": "PAUSED", "budget": 15}])
+    [campaign] = json.loads(route.calls.last.request.content)["campaigns"]
+    assert campaign["budget"] == {"budget": 15.0, "budgetType": "DAILY"}
+
+
+def test_sp_campaign_budget_already_an_object_is_passed_through(
+    api: respx.MockRouter, us: ProfileClient
+) -> None:
+    route = api.put(f"{NA}/sp/campaigns").mock(
+        return_value=Response(
+            207, json={"campaigns": {"success": [{"index": 0, "campaignId": "9"}]}}
+        )
+    )
+    us.sp.campaigns.update(
+        [{"campaignId": "9", "budget": {"budget": 20, "budgetType": "LIFETIME"}}]
+    )
+    [campaign] = json.loads(route.calls.last.request.content)["campaigns"]
+    assert campaign["budget"] == {"budget": 20.0, "budgetType": "LIFETIME"}
+
+
+def test_sp_campaign_budget_of_an_impossible_type_is_refused_before_any_request(
+    api: respx.MockRouter, us: ProfileClient
+) -> None:
+    route = api.put(f"{NA}/sp/campaigns")
+    with pytest.raises(ValueError, match=r"sp\.campaigns budget takes a number"):
+        us.sp.campaigns.update([{"campaignId": "9", "budget": ["20"]}])
+    assert route.call_count == 0
+
+
+def test_sb_campaign_budget_stays_a_flat_number(api: respx.MockRouter, us: ProfileClient) -> None:
+    # A Sponsored Brands campaign holds its budget as a number beside a sibling
+    # budgetType, so the widening that Sponsored Products needs would break it.
+    route = api.put(f"{NA}/sb/v4/campaigns").mock(
+        return_value=Response(
+            207, json={"campaigns": {"success": [{"index": 0, "campaignId": "303"}]}}
+        )
+    )
+    us.sb.campaigns.update([{"campaignId": "303", "budget": 20}])
+    sent = json.loads(route.calls.last.request.content)
+    assert sent == {"campaigns": [{"campaignId": "303", "budget": 20}]}
+
+
+def test_sp_campaign_budget_accepts_the_snake_case_spelling_and_the_model(
+    api: respx.MockRouter, us: ProfileClient
+) -> None:
+    # Dict items may be written either way, so a budget_type key must not end up beside
+    # an inherited budgetType, where it would lose and still be sent as an extra field.
+    api.post(f"{NA}/sp/campaigns/list").mock(
+        return_value=Response(
+            200,
+            json={
+                "campaigns": [
+                    {
+                        "campaignId": "9",
+                        "name": "Mysteries",
+                        "budget": {"budget": 500.0, "budgetType": "LIFETIME"},
+                    }
+                ]
+            },
+        )
+    )
+    plan = us.sp.campaigns.plan_update(
+        [{"campaignId": "9", "budget": {"budget": 20, "budget_type": "DAILY"}}]
+    )
+    [change] = plan.changes
+    assert change.after == {"budget": {"budget": 20.0, "budgetType": "DAILY"}}
+
+    route = api.put(f"{NA}/sp/campaigns").mock(
+        return_value=Response(
+            207, json={"campaigns": {"success": [{"index": 0, "campaignId": "9"}]}}
+        )
+    )
+    us.sp.campaigns.update([{"campaignId": "9", "budget": Budget(budget=5)}])
+    [campaign] = json.loads(route.calls.last.request.content)["campaigns"]
+    assert campaign["budget"] == {"budget": 5.0, "budgetType": "DAILY"}
+
+
+def test_sp_campaign_budget_ignores_read_only_keys_a_read_returned(
+    api: respx.MockRouter, us: ProfileClient
+) -> None:
+    # Echoing a field Amazon only reports back would be rejected, so only the keys the
+    # Budget model names are inherited from the campaign's current budget.
+    api.post(f"{NA}/sp/campaigns/list").mock(
+        return_value=Response(
+            200,
+            json={
+                "campaigns": [
+                    {
+                        "campaignId": "9",
+                        "name": "Mysteries",
+                        "budget": {
+                            "budget": 10.0,
+                            "budgetType": "DAILY",
+                            "effectiveBudget": 9.5,
+                        },
+                    }
+                ]
+            },
+        )
+    )
+    [change] = us.sp.campaigns.plan_update([{"campaignId": "9", "budget": 20}]).changes
+    assert change.after == {"budget": {"budget": 20.0, "budgetType": "DAILY"}}
+
+
+def test_specs_stay_hashable(us: ProfileClient) -> None:
+    # Specs are plain frozen values; a caller keying a dict or set by spec must not break
+    # because one of their fields is a mapping.
+    from amazon_ads.sb import ALL_SPECS as SB_SPECS
+    from amazon_ads.sp import ALL_SPECS as SP_SPECS
+
+    assert len({*SP_SPECS, *SB_SPECS}) == len(SP_SPECS) + len(SB_SPECS)

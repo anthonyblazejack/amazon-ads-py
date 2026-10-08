@@ -6,6 +6,27 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- A Sponsored Products campaign budget given as a number (`{"campaignId": "9", "budget":
+  20}`) is now sent as the object Amazon requires, `{"budget": 20.0, "budgetType":
+  "DAILY"}`. Amazon rejects a bare number with a 400 for the whole request that names no
+  field, and `plan_update` built a plan that looked right, with an object before and a
+  number after, so the only clue was the mismatched shapes in the plan table. Budgets are
+  now widened and validated through the `Budget` model in `create`, `update`,
+  `plan_update` and `plan_create` alike, so a plan's before and after read the same way
+  and the plan that is approved is the request that gets sent. `plan_update` and
+  `plan_create` refuse a budget that is neither a number, a mapping nor a `Budget` with a
+  `ValueError` naming the field, instead of building a plan that fails part way through
+  applying. `plan_update` knows the campaign's current values and keeps its existing
+  `budgetType`, so raising a lifetime budget no longer plans a switch to daily; `update`
+  and `create` read nothing back, so a bare number there means a daily budget, and the
+  object has to be passed explicitly to say otherwise. The budget may be given in either
+  spelling (`budgetType` or `budget_type`) or as a `Budget` instance. Sponsored
+  Brands campaigns are untouched: they store the budget as a plain number beside a
+  sibling `budgetType`, and the widening would break them. `EntitySpec.object_fields`
+  records, per entity, which fields Amazon takes only as an object.
+
 ### Added
 
 - `sb.keywords.create` and `sb.negative_keywords.create` drop `state`. Both endpoints

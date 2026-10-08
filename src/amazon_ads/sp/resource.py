@@ -19,6 +19,8 @@ from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
+from pydantic import ValidationError
+
 from amazon_ads.batch import BatchResult, parse_multi_status
 from amazon_ads.models import ApiModel
 from amazon_ads.plans import ChangePlan, PlannedChange
@@ -39,6 +41,24 @@ EntityInput = Mapping[str, Any] | ApiModel
 
 
 @dataclass(frozen=True)
+class ObjectField:
+    """A field Amazon accepts only as a JSON object, declared so a caller can still pass
+    the bare number it reads as.
+
+    ``model`` validates the object and supplies the siblings Amazon requires but does not
+    ask the caller for; ``value_key`` is the key a bare number is written to.
+    """
+
+    model: type[ApiModel]
+    value_key: str
+
+    @property
+    def allowed(self) -> frozenset[str]:
+        """The API field names the object may carry."""
+        return frozenset(f.alias or name for name, f in self.model.model_fields.items())
+
+
+@dataclass(frozen=True)
 class EntitySpec(Generic[M]):
     kind: str  # stable name used in change plans, e.g. "sp.keywords"
     path: str  # "/sp/keywords"
@@ -55,6 +75,13 @@ class EntitySpec(Generic[M]):
     max_filter_ids: int = 1000
     # States listed when the caller does not say. None lists every state.
     default_states: tuple[str, ...] | None = ("ENABLED", "PAUSED")
+    # Fields Amazon takes as an object rather than as the number they read as. Declared
+    # per entity because the two products disagree: a Sponsored Products campaign budget
+    # is an object, while a Sponsored Brands campaign stores the same budget as a flat
+    # number beside a sibling budgetType, so a bare number is already right there.
+    # hash=False because this frozen dataclass builds __hash__ out of its fields and a
+    # dict is unhashable: without it, hash(spec) raises for every spec.
+    object_fields: Mapping[str, ObjectField] = dataclasses.field(default_factory=dict, hash=False)
 
     @property
     def success_id_field(self) -> str:
@@ -167,7 +194,7 @@ class SpResource(Generic[M]):
         Call :meth:`BatchResult.raise_for_errors` to turn any rejected item into an
         exception.
         """
-        payloads = [_to_payload(item) for item in items]
+        payloads = [_coerce_object_fields(_to_payload(item), self.spec) for item in items]
         return self._write("POST", self.spec.path, payloads)
 
     def update(self, items: Sequence[EntityInput]) -> BatchResult[dict[str, Any]]:
@@ -176,7 +203,7 @@ class SpResource(Generic[M]):
         Fields Amazon does not allow changing (for example a keyword's text or match
         type) are dropped from the payload rather than sent and rejected.
         """
-        payloads = [self._update_payload(item) for item in items]
+        payloads = [_coerce_object_fields(self._update_payload(item), self.spec) for item in items]
         return self._write("PUT", self.spec.path, payloads)
 
     def delete(self, ids: Sequence[str | int]) -> BatchResult[dict[str, Any]]:
@@ -213,6 +240,10 @@ class SpResource(Generic[M]):
         Reads each entity's current values so the plan shows before and after for every
         field and can be reversed. Items whose values already match are left out. Ids
         Amazon does not return are reported in ``plan.missing``.
+
+        Because the current values are known here, a field Amazon takes as an object
+        keeps the siblings the entity already has: raising a lifetime budget to 20 plans
+        ``{"budget": 20.0, "budgetType": "LIFETIME"}``, not a silent switch to daily.
         """
         payloads = [self._update_payload(item) for item in items]
         ids = [str(p[self.spec.id_field]) for p in payloads]
@@ -228,7 +259,9 @@ class SpResource(Generic[M]):
             before_all = entity.to_api()
             before: dict[str, Any] = {}
             after: dict[str, Any] = {}
-            for field, value in payload.items():
+            for field, value in _coerce_object_fields(
+                payload, self.spec, current=before_all
+            ).items():
                 if field == self.spec.id_field:
                     continue
                 old = before_all.get(field)
@@ -255,10 +288,15 @@ class SpResource(Generic[M]):
 
     def plan_create(self, items: Sequence[EntityInput], *, note: str | None = None) -> ChangePlan:
         """A plan that creates entities. Its rollback, built after applying, archives the
-        ids Amazon assigned."""
+        ids Amazon assigned.
+
+        Fields Amazon takes only as an object are put into that shape here as well, so the
+        plan that is reviewed is the request that will be sent, and a bad value is refused
+        while the plan is built rather than part way through applying it.
+        """
         changes = []
         for item in items:
-            payload = _to_payload(item)
+            payload = _coerce_object_fields(_to_payload(item), self.spec)
             payload.pop(self.spec.id_field, None)
             changes.append(
                 PlannedChange(
@@ -381,6 +419,62 @@ class SpResource(Generic[M]):
         result.successes.sort(key=lambda s: s.index)
         result.errors.sort(key=lambda e: e.index)
         return result
+
+
+def _coerce_object_fields(
+    payload: dict[str, Any],
+    spec: EntitySpec[Any],
+    *,
+    current: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Put every field Amazon only accepts as an object into that shape, and validate it.
+
+    A Sponsored Products campaign budget must be sent as
+    ``{"budget": 20.0, "budgetType": "DAILY"}``. Sent as a bare number it is rejected with
+    a 400 that names no field, so a number is widened here, and the result is validated
+    through the field's model whichever way the caller wrote it. Siblings the caller did
+    not set are taken from the entity's current value when ``current`` gives one, and
+    otherwise from the model's defaults.
+
+    The value may be a number, a mapping in either spelling, or an instance of the field's
+    model. Anything else raises, so the plan or the write fails with a message naming the
+    field instead of a 400 from Amazon.
+    """
+    if not spec.object_fields:
+        return payload
+    out = dict(payload)
+    for name, shape in spec.object_fields.items():
+        value = out.get(name)
+        if value is None:
+            continue
+        existing = (current or {}).get(name)
+        # Only the keys the model names are inherited: a read may carry fields that are
+        # not writable, and sending those back would be rejected.
+        fields: dict[str, Any] = (
+            {k: v for k, v in existing.items() if k in shape.allowed and k != shape.value_key}
+            if isinstance(existing, Mapping)
+            else {}
+        )
+        if isinstance(value, Mapping | ApiModel):
+            # Through _to_payload so a snake_case key (budget_type) and a model instance
+            # (Budget(...)) both arrive under the API's spelling. Merged raw, a snake_case
+            # key would sit beside the inherited camelCase one, lose to it in validation,
+            # and still be sent to Amazon as an unknown extra field.
+            fields.update(_to_payload(value))
+        elif isinstance(value, int | float) and not isinstance(value, bool):
+            fields[shape.value_key] = value
+        else:
+            raise ValueError(
+                f"{spec.kind} {name} takes a number, a mapping or a "
+                f"{shape.model.__name__}, not {value!r}"
+            )
+        try:
+            out[name] = shape.model.model_validate(fields).to_api()
+        except ValidationError as exc:
+            raise ValueError(
+                f"{spec.kind} {name} is not a valid {shape.model.__name__}: {exc}"
+            ) from exc
+    return out
 
 
 def _to_payload(item: EntityInput) -> dict[str, Any]:

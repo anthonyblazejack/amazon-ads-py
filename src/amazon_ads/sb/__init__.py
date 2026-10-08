@@ -37,6 +37,7 @@ from amazon_ads.sp.resource import (
     EntitySpec,
     SpResource,
     _chunks,
+    _coerce_object_fields,
     _to_payload,
     _Unset,
 )
@@ -65,6 +66,9 @@ CAMPAIGNS = EntitySpec(
             "tags",
         }
     ),
+    # No object_fields: a Sponsored Brands campaign holds its budget as a flat number
+    # beside a sibling budgetType, unlike a Sponsored Products campaign, so "budget": 20
+    # is the shape the API wants and must be passed through untouched.
     # The v4 spec caps an update at 10 campaigns and an id filter at 10 ids.
     max_batch=10,
     max_filter_ids=10,
@@ -125,7 +129,7 @@ class SbAdsResource(SpResource[SbAd]):
     """
 
     def create(self, items: Sequence[EntityInput]) -> BatchResult[dict[str, Any]]:
-        payloads = [_to_payload(item) for item in items]
+        payloads = [_coerce_object_fields(_to_payload(item), self.spec) for item in items]
         formats = {str(p.pop("adFormat", None) or DEFAULT_AD_FORMAT) for p in payloads}
         if len(formats) > 1:
             raise ValueError(
