@@ -123,3 +123,24 @@ def test_aggregate_sums_metrics_and_derives_rates() -> None:
     assert total["acos14d"] == 0.2
     assert "keywordBid" not in total
     assert "campaignId" not in total
+
+
+def test_unexpected_error_keeps_its_reason():
+    """An exception type outside EXPECTED_ERRORS used to propagate raw, and the MCP client
+    showed only "Error executing tool <name>". A half-updated server process raised
+    ImportError that way and the cause was invisible for a day."""
+    from amazon_ads.mcp.server import _surface_errors
+
+    class ToolError(Exception):
+        pass
+
+    def boom():
+        raise ImportError("cannot import name '_coerce_object_fields'")
+
+    with pytest.raises(ToolError) as caught:
+        _surface_errors(boom, ToolError)()
+
+    message = str(caught.value)
+    assert "ImportError" in message
+    assert "_coerce_object_fields" in message
+    assert "boom" in message, "the traceback frames should reach the caller too"

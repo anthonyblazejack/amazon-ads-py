@@ -6,7 +6,7 @@ import threading
 import time
 from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import httpx
 
@@ -18,12 +18,20 @@ from amazon_ads.models import Profile
 from amazon_ads.regions import Region, normalize_country, region_for
 from amazon_ads.transport import RetryPolicy, Transport
 
-if TYPE_CHECKING:
-    from amazon_ads.bids import BidRecommendations
-    from amazon_ads.history import History
-    from amazon_ads.reports import Reports
-    from amazon_ads.sp import SponsoredProducts
-    from amazon_ads.sp.resource import SpResource
+# Imported at module scope, not inside ProfileClient, on purpose. These used to be
+# deferred into the constructor, which meant they were first resolved on the first tool
+# call that touched the account, often hours after the process started. Editing the
+# package under a long-lived server then loaded new modules into a process still holding
+# the old ones: on 2026-10-08 a server started before commit caabb3e read the new
+# amazon_ads.sb against the old amazon_ads.sp.resource and raised "ImportError: cannot
+# import name '_coerce_object_fields'" 22 hours in. Importing everything up front makes
+# a half-updated process fail at startup instead.
+from amazon_ads.bids import BidRecommendations
+from amazon_ads.history import History
+from amazon_ads.reports import Reports
+from amazon_ads.sb import SponsoredBrands, resource_for
+from amazon_ads.sp import ALL_SPECS, PORTFOLIOS, SponsoredProducts
+from amazon_ads.sp.resource import SpResource
 
 
 class AmazonAds:
@@ -184,13 +192,6 @@ class ProfileClient:
     """
 
     def __init__(self, account: AmazonAds, profile: Profile) -> None:
-        from amazon_ads.bids import BidRecommendations
-        from amazon_ads.history import History
-        from amazon_ads.reports import Reports
-        from amazon_ads.sb import SponsoredBrands
-        from amazon_ads.sp import PORTFOLIOS, SponsoredProducts
-        from amazon_ads.sp.resource import SpResource
-
         self.account = account
         self.profile = profile
         self.region: Region = region_for(profile.country_code)
@@ -286,10 +287,6 @@ class ProfileClient:
     def resource(self, kind: str) -> SpResource[Any]:
         """The resource behind a change plan's ``kind`` (``"sp.keywords"``,
         ``"sb.keywords"``, ...)."""
-        from amazon_ads.sb import resource_for
-        from amazon_ads.sp import ALL_SPECS
-        from amazon_ads.sp.resource import SpResource
-
         sb_resource = resource_for(self, kind)
         if sb_resource is not None:
             return sb_resource

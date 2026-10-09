@@ -24,6 +24,7 @@ Configuration comes from the environment:
 from __future__ import annotations
 
 import functools
+import traceback
 import json
 import os
 from collections import defaultdict
@@ -692,6 +693,13 @@ def _surface_errors(fn: Callable[..., Any], tool_error: type[Exception]) -> Call
             return fn(*args, **kwargs)
         except EXPECTED_ERRORS as exc:
             raise tool_error(f"{type(exc).__name__}: {exc}") from exc
+        except Exception as exc:
+            # Anything not in EXPECTED_ERRORS used to propagate raw, and the MCP client
+            # showed only "Error executing tool <name>" with no reason. An ImportError
+            # from a half-updated process hid behind that for a day before anyone could
+            # see what it was. Send the type, the message and the last frames back too.
+            detail = "".join(traceback.format_exception(exc)).strip()
+            raise tool_error(f"{type(exc).__name__}: {exc}\n\n{detail}") from exc
 
     return wrapper
 
