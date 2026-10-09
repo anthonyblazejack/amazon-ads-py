@@ -29,6 +29,20 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- API notes now record Amazon's keyword text constraints and the shape of its report
+  creation throttle, so `api_notes` and `docs/guide/quirks.md` carry both. The keyword
+  limits (80 characters; 10 space-separated parts for a positive keyword or a
+  `negativeExact`, 4 for any other negative match type; the hyphen, plus and period only
+  inside a word; and a short list of accepted symbols that excludes round brackets and
+  the colon) are documented by Amazon but only on a JavaScript-rendered page, and appear
+  nowhere in the OpenAPI specs, where `keywordText` is a plain string with no `maxLength`
+  and no `pattern`. A client cannot refuse a bad keyword from the spec, so an over-long
+  one is only discovered as a per-item 207 error after the rest of the batch has been
+  written. Report creation (`POST /reporting/reports`) is throttled per account over a
+  window longer than one request's retries can span, so a bulk sync asking for many
+  report types across several profiles has its last requests refused while the earlier
+  ones succeed; the note says to retry after the run has stopped asking rather than
+  inside the loop, and to widen `RetryPolicy` for such a sync.
 - `sb.keywords.create` and `sb.negative_keywords.create` drop `state`. Both endpoints
   reject it outright, although a read returns it and an update accepts it, and a created
   keyword is enabled anyway. `SbV3Spec.create_forbidden` holds the fields a create must

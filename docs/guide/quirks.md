@@ -9,6 +9,34 @@ Behavior of the live Amazon Ads API that its documentation and specs do not stat
   given, otherwise exponential backoff) and pauses all its other requests during the
   wait. Bid recommendations throttle hardest; expect waits of several seconds when
   pricing hundreds of targets.
+- Report creation (POST /reporting/reports) is throttled per account over a window longer
+  than one request's retries can cover. Asking for ten report types across four profiles
+  back to back had the last ones refused while the earlier ones succeeded, consistently
+  the same ones, because the whole run shares the quota. Retrying inside the loop
+  competes with the rest of the run; wait until the run has stopped asking, then retry
+  with pauses of minutes. Pass a RetryPolicy with a larger backoff_max and max_total_wait
+  for a bulk sync.
+
+## Keyword text
+These are documented, on
+https://advertising.amazon.com/API/docs/en-us/reference/concepts/limits#keyword-character-constraints,
+but that page is rendered by JavaScript and the constraints appear nowhere in the OpenAPI
+specs: keywordText and nativeLanguageKeyword are plain strings with no maxLength and no
+pattern. So the client cannot refuse a bad keyword from the spec, and an over-long one
+comes back as a per-item 207 error. The limits below were read from that page on
+2026-10-08 and apply to Sponsored Products, Sponsored Brands and Sponsored Display alike.
+- At most 80 characters.
+- At most 10 "parts" (space-separated words) for a positive keyword. A negative keyword
+  gets 4, except negativeExact, which also gets 10.
+- Leading and trailing spaces are refused. Inner spaces are fine.
+- The hyphen, plus and period are accepted only inside a word: "entry- level" and a
+  trailing "2026." are refused, "entry-level" is not.
+- The only non-alphanumeric characters accepted in every marketplace are
+  -  &  +  [  ]  '  "  and tab, newline and carriage return. The percent sign is accepted
+  only in AE, SA and EG. Round brackets and the colon are not accepted anywhere, so a
+  search term Amazon's own report writes as "driver training (eldt)" cannot be sent back
+  as keyword text unchanged.
+- The literal phrase "Automatically Selected Keywords" is reserved and refused.
 
 ## Writes
 - Batch writes answer 207 Multi-Status and succeed or fail per item, even when every
