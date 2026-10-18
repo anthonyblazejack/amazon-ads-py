@@ -122,6 +122,7 @@ tools too.
 ## Keeping the catalog current
 
 The catalog is generated from Amazon's specs by `scripts/fetch_specs.py` and
-`scripts/generate_catalog.py`. A scheduled workflow re-fetches them weekly and opens a
-pull request when Amazon changes anything. Corrections live in `amazon_ads/catalog.py`,
-not in the generated file, so a refresh keeps them. See [development](../development.md).
+`scripts/generate_catalog.py`. A scheduled workflow re-fetches them weekly and commits
+the regenerated catalog to main when Amazon changes anything and the tests still pass.
+Corrections live in `amazon_ads/catalog.py`, not in the generated file, so a refresh
+keeps them. See [development](../development.md).

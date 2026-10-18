@@ -45,7 +45,10 @@ uv run python scripts/generate_catalog.py   # rebuilds the catalog and the cover
 
 The specs are Amazon's documents and are not committed. The generated
 `src/amazon_ads/_generated/catalog.json` and `docs/reference/coverage.md` are. A weekly
-workflow runs both scripts and opens a pull request when anything changed.
+workflow (`.github/workflows/specs.yml`) runs both scripts, runs the tests, the em dash
+check and the strict docs build, and when anything changed commits the result straight
+to main, listing added and removed operations in the commit message. A failed run pushes
+nothing.
 
 When the typed layer changes which operations it wraps, update `WRAPPED_PREFIXES` in
 `scripts/generate_catalog.py` so the coverage page marks them.
@@ -67,7 +70,7 @@ text is served to Claude by the MCP server.
 ## Documentation
 
 Every change to public behavior updates the relevant page under `docs/`, the README if
-it affects the quick start, and `CHANGELOG.md`, in the same pull request.
+it affects the quick start, and `CHANGELOG.md`, in the same commit.
 
 ```bash
 uv run mkdocs serve
