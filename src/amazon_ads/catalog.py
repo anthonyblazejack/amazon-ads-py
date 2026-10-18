@@ -30,6 +30,31 @@ from importlib import resources
 from typing import Any, Final
 
 from amazon_ads.errors import UnsupportedOperationError
+from amazon_ads.transport import READ_ONLY_POST_SUFFIXES
+
+# A POST counts as read-only when its operation id, or one of its path segments, starts
+# with one of these words: listCampaigns, /sp/keywords/list, /adsApi/v1/query/targets,
+# /sp/targets/bid/recommendations. Only the start of an id or segment is compared. A
+# bare substring test matched "get" inside "targets", "budgetRules" and
+# "targetPromotionGroups", and "search" inside "audienceResearch", so creates such as
+# POST /sp/targets were treated as reads: the MCP server called them without a plan and
+# the transport retried them after a 5xx, which can create every target twice.
+READ_WORDS = ("list", "query", "recommendation", "search", "get", "describe", "history")
+
+# A POST whose operation id or any path segment starts with one of these is never
+# read-only, even when a read word or a read-only suffix also matches. Some writes carry
+# both: createQueryBasedAudience is POST /amc/audiences/query, and the /query suffix
+# alone would let the MCP server start an audience build without approval.
+WRITE_WORDS = ("create", "update", "delete", "archive")
+
+# Path endings that mark a POST read-only. They include every suffix the transport
+# treats as safe to resend after a 5xx (READ_ONLY_POST_SUFFIXES), so ProfileClient.call()
+# never refuses a retry that ProfileClient.request() would make for the same path. The
+# catalog goes further than the transport: "/query" and the read words above make more
+# POSTs read-only, and call() retries those while a bare request() to the same path does
+# not. The transport keeps the shorter list because it decides from the path alone, with
+# no operation id, and no request the library builds itself goes to a /query path.
+READ_ONLY_PATH_SUFFIXES = (*READ_ONLY_POST_SUFFIXES, "/query")
 
 
 @dataclass(frozen=True)
@@ -58,16 +83,26 @@ class Operation:
     @property
     def read_only(self) -> bool:
         """True for operations that change nothing: GETs, and POSTs whose path or id
-        says they list, query or recommend. Used by the MCP server's read-only mode."""
+        says they list, query or recommend (see ``READ_WORDS``) and nothing says they
+        create, update, delete or archive (see ``WRITE_WORDS``).
+
+        The MCP server's ``call_operation`` refuses every operation for which this is
+        False, ``adsctl ops call`` asks before sending one, and
+        :meth:`ProfileClient.call` retries an operation after a 5xx or timeout only
+        when this is True."""
         if self.method == "GET":
             return True
         if self.method != "POST":
             return False
-        path = self.path.rstrip("/").lower()
+        path = self.path.rstrip("/")
         op = self.operation_id.lower()
-        read_words = ("list", "query", "recommendation", "search", "get", "describe", "history")
-        return path.endswith(("/list", "/query", "/history")) or any(
-            op.startswith(w) or w in path.rsplit("/", 1)[-1] for w in read_words
+        segments = [s.lower() for s in path.split("/") if s and not s.startswith("{")]
+        if op.startswith(WRITE_WORDS) or any(s.startswith(WRITE_WORDS) for s in segments):
+            return False
+        return (
+            path.endswith(READ_ONLY_PATH_SUFFIXES)
+            or op.startswith(READ_WORDS)
+            or any(s.startswith(READ_WORDS) for s in segments)
         )
 
     def ensure_sendable(self) -> None:

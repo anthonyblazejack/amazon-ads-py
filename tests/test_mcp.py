@@ -127,6 +127,22 @@ def test_search_operations_scoped_to_mcp_tools_says_why_they_cannot_be_called(
     assert all("hosted Ads MCP server" in r["unsupported"] for r in rows)
 
 
+def test_creating_targets_through_call_operation_is_refused(
+    api: respx.MockRouter, tools: AdsTools
+) -> None:
+    # POST /sp/targets once counted as read-only because "get" is a substring of
+    # "targets", so an agent could create targets with no plan and no approval.
+    create = api.post(f"{NA}/sp/targets")
+    with pytest.raises(PermissionError, match="can change data"):
+        tools.call_operation(
+            "US",
+            "sponsored-products:CreateSponsoredProductsTargetingClauses",
+            {"targetingClauses": [{"campaignId": "1", "adGroupId": "2", "bid": 0.5}]},
+        )
+    assert not create.called
+    assert not api.calls
+
+
 def test_plan_ids_cannot_escape_the_plan_directory(tools: AdsTools) -> None:
     with pytest.raises(ValueError, match="alphanumeric"):
         tools.get_plan("../../etc/passwd")

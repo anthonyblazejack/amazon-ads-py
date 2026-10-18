@@ -34,7 +34,33 @@ All notable changes to this project are documented here. The format follows
   names the Ads API operation to call instead for `mcp-billing:list_invoices` and
   `mcp-billing:list_invoice_summaries`. `call_operation` checks this before its
   write check, so an MCP tool that writes is not pointed at the plan tools.
-
+- `Operation.read_only` no longer calls a write read-only because a read word appears
+  inside a path segment. It matched its read words (`list`, `query`, `get`, `search`,
+  ...) anywhere inside the last path segment, so "get" inside "targets", "budgetRules"
+  and "targetPromotionGroups", and "search" inside "audienceResearch", made 60 Ads API
+  writes count as reads, among them
+  `sponsored-products:CreateSponsoredProductsTargetingClauses` (`POST /sp/targets`),
+  `sponsored-brands-v3:createTargets` and `createNegativeTargets`, the targeting creates
+  of the DSP, media planning and unified (`/adsApi/v1/create/targets`) APIs, and the
+  budget rule creates and associations for Sponsored Products, Brands and Display.
+  Through those, `call_operation` on the MCP server created entities with no plan and no
+  approval, `ProfileClient.call()` resent them after a 5xx or a timeout (which can create
+  every target twice), and `adsctl ops call` sent them without asking. A read word now
+  has to start the operation id or a whole path segment, and an operation id or segment
+  starting with `create`, `update`, `delete` or `archive` is never read-only, which also
+  catches `rule-based-audiences:createQueryBasedAudience` (`POST /amc/audiences/query`).
+  Every path the transport retries as read-only (`READ_ONLY_POST_SUFFIXES`) now counts
+  as read-only in the catalog too. Because the read words now match any segment, 28
+  reads on the unified `/adsApi/v1/query/...` paths, plus
+  `sponsored-brands-v4:SBOptimizationRecommendation` and
+  `SBTargetingGetTargetableASINCounts`, become read-only and callable through
+  `call_operation`. Three reads that were read-only only by the same substring accident
+  now count as writes, so `call_operation` refuses them and `ops call` asks first:
+  `dsp-quick-actions:batchGetExecutionsV1`,
+  `measurement:CheckDSPAudienceResearchEligibility` and the deprecated
+  `sponsored-products-v2:createKeywordBidRecommendations`. One write named like a read is
+  still read-only: `creative-assets:getUploadLocation`, which creates an upload URL that
+  expires after 15 minutes.
 - A Sponsored Products campaign budget given as a number (`{"campaignId": "9", "budget":
   20}`) is now sent as the object Amazon requires, `{"budget": 20.0, "budgetType":
   "DAILY"}`. Amazon rejects a bare number with a 400 for the whole request that names no

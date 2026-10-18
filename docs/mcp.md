@@ -96,7 +96,10 @@ does not flood the conversation. `run_report` can save every row to a file.
    is the same two steps with the rollback plan.
 
 Claude cannot bypass this through `call_operation`, which refuses any operation that
-can change data. In read-only mode the write tools do not exist.
+can change data. It decides from the operation's method, id and path, and counts an
+operation as a write unless the name says it only reads; see
+[read-only operations](guide/any-endpoint.md#read-only-operations). In read-only mode
+the write tools do not exist.
 
 Claude Code also asks you before each tool call unless you have allowed the tool.
 Keeping `apply_plan` out of your allow list gives a second, independent approval step.
