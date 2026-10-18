@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from urllib.parse import unquote
+
+import httpx
 import pytest
 import respx
 from httpx import Response
@@ -335,3 +338,111 @@ def test_operations_named_in_mcp_refusals_can_be_called() -> None:
         target = catalog.get(instead)
         assert target.unsupported_reason is None, instead
         assert target.read_only, instead
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "../sp/targets?x=",
+        "..",
+        ".",
+        "",
+        "a/b",
+        "a?b",
+        "a#b",
+        "a\\b",
+        "..%2Fsp%2Ftargets",
+        "a%2fb",
+        "%2E%2E",
+        "a%3Fb",
+        "a%23b",
+        "a%5Cb",
+        "%252F",
+        "..;",
+        "..;x",
+        ".;x",
+        ";x",
+        "...",
+        ".. ",
+        " ",
+        "..\x00",
+    ],
+)
+def test_call_refuses_a_path_parameter_that_leaves_its_segment(
+    api: respx.MockRouter, us: ProfileClient, value: str
+) -> None:
+    # Each of these reaches a different path than the operation's, either as httpx sends
+    # it or as a server reads it after percent-decoding, cutting a segment at ";",
+    # trimming trailing dots and spaces, or stopping at NUL. A read-only operation could
+    # then be pointed at a write.
+    with pytest.raises(ValueError, match="brandEntityId"):
+        us.call("stores:getInsightsForStoreAPI", {}, path_params={"brandEntityId": value})
+    assert not api.calls
+
+
+def test_ordinary_ids_fill_the_path_unchanged(api: respx.MockRouter, us: ProfileClient) -> None:
+    op = catalog.get("reporting:getAsyncReport")
+    assert op.format_path({"reportId": "abc-123"}) == "/reporting/reports/abc-123"
+    assert op.format_path({"reportId": 42}) == "/reporting/reports/42"
+    # Amazon's amzn1 ids carry "." and ":", which must not be encoded or dropped.
+    account = "amzn1.ads-account.g.EXAMPLE0123:a_b~c"
+    assert op.format_path({"reportId": account}) == f"/reporting/reports/{account}"
+
+    route = api.get(f"{NA}/reporting/reports/abc-123").mock(
+        return_value=Response(200, json={"reportId": "abc-123", "status": "PENDING"})
+    )
+    us.call("reporting:getAsyncReport", path_params={"reportId": "abc-123"})
+    assert route.called
+
+
+@pytest.mark.parametrize(
+    "brand",
+    [
+        "Acme & Sons",
+        "100% Pure",
+        "Café (EU)",
+        "50+ Ideas",
+        "a;b",
+        "{categoryId}",
+        # Fullwidth "A/B": its solidus is not "/", so it is encoded, not refused.
+        "\uff21\uff0f\uff22",
+        "ブランド　名",
+    ],
+)
+def test_a_path_parameter_reaches_amazon_as_the_exact_value(brand: str) -> None:
+    op = catalog.get("sponsored-brands-category-benchmark:getTimeSeries")
+    path = op.format_path({"brandName": brand, "categoryId": "7"})
+    # What httpx puts on the wire, split the way the server splits it.
+    sent = httpx.URL(NA + path).raw_path.decode().split("/")
+    assert sent[:3] == ["", "benchmarks", "brands"]
+    assert sent[4:] == ["categories", "7"]
+    assert unquote(sent[3]) == brand
+
+
+def test_every_placeholder_must_be_filled_even_if_the_spec_does_not_declare_it() -> None:
+    # Amazon's marketing mix modeling spec leaves {reportId} out of the operation's
+    # parameters, so the catalog lists none for it.
+    op = catalog.get("marketing-mix-modeling:getMmmReport")
+    assert "{reportId}" in op.path
+    with pytest.raises(ValueError, match="reportId"):
+        op.format_path({})
+    with pytest.raises(ValueError, match="reportId"):
+        op.format_path({"reportId": "../../sp/targets"})
+
+
+@pytest.mark.parametrize("brand", ["My%20Brand", "%41", "caf%C3%A9"])
+def test_a_percent_encoded_value_is_refused_rather_than_sent_encoded_twice(brand: str) -> None:
+    # Amazon would read "My%20Brand" back as those ten characters, not "My Brand", and
+    # answer for a brand that does not exist instead of failing.
+    op = catalog.get("sponsored-brands-category-benchmark:getTimeSeries")
+    with pytest.raises(ValueError, match="brandName"):
+        op.format_path({"brandName": brand, "categoryId": "7"})
+
+
+@pytest.mark.parametrize("value", [None, True, 1.5, 1e17, "\ud800"])
+def test_a_value_that_is_not_id_text_is_refused_by_name(value: object) -> None:
+    # str() would send None as "None" and 1e17 as "1e+17", and a lone surrogate cannot
+    # be encoded at all; each must fail naming the parameter, not reach Amazon.
+    op = catalog.get("reporting:getAsyncReport")
+    with pytest.raises(ValueError, match="reportId"):
+        op.format_path({"reportId": value})

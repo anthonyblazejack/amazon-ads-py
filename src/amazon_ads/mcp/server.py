@@ -411,6 +411,11 @@ class AdsTools:
                 f"{op.id} ({op.method} {op.path}) can change data and cannot be called "
                 "directly. Use plan_update, plan_create or plan_archive."
             )
+        # The read_only check above is only meaningful if the request goes to op.path.
+        # format_path refuses a path parameter that would steer it elsewhere (such as
+        # "../sp/targets"); run it before looking up the market's profile, which can
+        # itself call the API, so a refused call sends nothing at all.
+        op.format_path(path_params)
         return self._client(market).call(op.id, body, path_params=path_params, query=query)
 
     # --- plans --------------------------------------------------------------------------

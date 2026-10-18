@@ -8,6 +8,26 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- A path parameter can no longer send a catalogued operation to a different endpoint.
+  `ProfileClient.call`, which the MCP server's `call_operation` and `adsctl ops call`
+  both use, put each path parameter into the path without encoding or checking it, and
+  httpx resolves `..` segments before sending. So
+  `call_operation("US", "stores:getInsightsForStoreAPI", ..., path_params={"brandEntityId":
+  "../sp/targets?x="})` sent `POST /sp/targets`: a write made without a plan or the
+  user's approval, and retried after a 5xx because the operation it started as is
+  read-only. `adsctl ops call` skipped its confirmation the same way. A path parameter
+  now raises `ValueError` naming it, before anything is sent, when it contains `/`, `\`,
+  `?`, `#` or a control character; when it is empty or only dots and spaces, also
+  counting only the part before a `;` (which Java servlet containers cut off); when it
+  is already percent-encoded (`%2F`, `%20`); or when it is `None`, a bool or a float.
+  `call_operation` refuses it before even looking up the market's profile. Every other
+  value is percent-encoded so Amazon reads back exactly what was given: letters, digits
+  and `-._~:@!$&'()*+,=` are sent as before, which keeps ids such as
+  `amzn1.ads-account.g.EXAMPLE` unchanged, and `%`, `;`, spaces and non-ASCII letters
+  are encoded. A value that was already percent-encoded used to be sent as it was and
+  now raises, so pass plain values. Path placeholders that a spec leaves out of the
+  operation's parameters (four marketing mix modeling operations) must now be filled
+  too; before, the request went out with the placeholder still in the path.
 - `advertising-billing:getAdvertiserInvoices` (GET /invoices) and
   `advertising-billing:getInvoice` (GET /invoices/{invoiceId}) now send
   `Accept: application/json`. Amazon's spec documents only

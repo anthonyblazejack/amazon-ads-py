@@ -42,6 +42,31 @@ To pin a different media type version than the newest the spec lists, pass
 `content_type=` and `accept=`. `op.content_types` and `op.accepts` list what the spec
 documents.
 
+### Path parameters
+
+Each path parameter fills exactly one segment of the operation's path, and Amazon reads
+back exactly the value you pass. Pass plain values, never percent-encoded ones:
+
+- Letters, digits and `-._~:@!$&'()*+,=` are sent as they are, so ids such as
+  `amzn1.ads-account.g.EXAMPLE` arrive unchanged.
+- Everything else is percent-encoded, including `%`, `;`, spaces and non-ASCII letters:
+  `"100% Pure"` is sent as `100%25%20Pure`.
+- A value that is already percent-encoded (it contains an escape such as `%20` or `%2F`)
+  raises `ValueError`. Sending it encoded a second time would make Amazon read
+  `My%20Brand` as those ten characters, not as `My Brand`. A literal `%` followed by two
+  hex digits therefore cannot be sent.
+- A value that could send the request to a different endpoint than the operation's
+  raises `ValueError` naming the parameter, before anything is sent: one that contains
+  `/`, `\`, `?`, `#` or a control character, or that is empty or only dots and spaces
+  (also counting only the part before a `;`). `{"brandEntityId": "../sp/targets?x="}`
+  would otherwise turn the read-only `stores:getInsightsForStoreAPI` into
+  `POST /sp/targets`.
+- `None`, `True`/`False` and floats raise `ValueError` too, rather than being sent as
+  `None`, `True` or `1e+17`. Pass ids as strings or integers.
+
+Every `{placeholder}` in the path must be filled, including the few that Amazon's specs
+leave out of the operation's parameter list.
+
 ## Where the live API disagrees with the spec
 
 Some operations refuse the media type their own spec documents. `catalog.CORRECTIONS`

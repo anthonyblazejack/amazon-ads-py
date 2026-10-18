@@ -98,8 +98,10 @@ does not flood the conversation. `run_report` can save every row to a file.
 Claude cannot bypass this through `call_operation`, which refuses any operation that
 can change data. It decides from the operation's method, id and path, and counts an
 operation as a write unless the name says it only reads; see
-[read-only operations](guide/any-endpoint.md#read-only-operations). In read-only mode
-the write tools do not exist.
+[read-only operations](guide/any-endpoint.md#read-only-operations). It also refuses a
+path parameter that would send a read-only operation to a different endpoint, such as
+`../sp/targets` (see [path parameters](guide/any-endpoint.md#path-parameters)), before
+anything is sent to Amazon. In read-only mode the write tools do not exist.
 
 Claude Code also asks you before each tool call unless you have allowed the tool.
 Keeping `apply_plan` out of your allow list gives a second, independent approval step.

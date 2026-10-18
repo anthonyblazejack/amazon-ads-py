@@ -28,6 +28,7 @@ from dataclasses import dataclass
 from functools import cache
 from importlib import resources
 from typing import Any, Final
+from urllib.parse import quote
 
 from amazon_ads.errors import UnsupportedOperationError
 from amazon_ads.transport import READ_ONLY_POST_SUFFIXES
@@ -111,14 +112,97 @@ class Operation:
             raise UnsupportedOperationError(self.unsupported_reason)
 
     def format_path(self, path_params: dict[str, Any] | None = None) -> str:
+        """The path with every ``{name}`` placeholder replaced by its value.
+
+        Each value fills exactly one path segment and reaches Amazon as given. A value
+        that is percent-encoded, or that could add or remove segments or start a query or
+        fragment, raises ``ValueError`` (see :func:`_path_segment`). Placeholders are read
+        from the path template itself rather than from ``path_params``, because a few
+        specs leave a placeholder undeclared, and every one of them must be filled and
+        checked. Names that match no placeholder are ignored.
+        """
         params = path_params or {}
-        missing = [p for p in self.path_params if p not in params]
+        names = dict.fromkeys(_PLACEHOLDER.findall(self.path))
+        missing = [name for name in names if name not in params]
         if missing:
             raise ValueError(f"{self.id} needs path parameters: {', '.join(missing)}")
-        path = self.path
-        for name, value in params.items():
-            path = path.replace("{" + name + "}", str(value))
-        return path
+        # One pass over the template, so a value that happens to contain "{other}" is
+        # never substituted a second time.
+        return _PLACEHOLDER.sub(
+            lambda m: _path_segment(self.id, m.group(1), params[m.group(1)]), self.path
+        )
+
+
+_PLACEHOLDER = re.compile(r"\{([^{}]+)\}")
+
+# Characters sent unencoded inside a path segment, beyond the letters, digits and "-._~"
+# that quote() never encodes. They are delimiters RFC 3986 (section 3.3, "pchar") allows
+# in a segment, and Amazon ids use some of them, such as the "." and ":" in
+# "amzn1.ads-account.g.EXAMPLE"; a server reads them the same encoded or not. ";" is left
+# out: Java servlet containers cut ";anything" off a segment before routing, so a raw
+# "..;x" would be read as "..". Every other character, "%" included, is percent-encoded,
+# so Amazon decodes the segment back to exactly the value given.
+_SEGMENT_SAFE = "!$&'()*+,=:@"
+
+# "/" starts a new segment, "?" a query and "#" a fragment. Some servers also read "\"
+# as "/". No Amazon id contains any of them.
+_SEPARATORS = ("/", "\\", "?", "#")
+
+# A segment that is empty or only dots changes which path the request reaches: httpx
+# resolves "/a/b/../c" to "/a/c" before sending, and some servers drop trailing dots and
+# spaces, which turns "..." or ".. " into "..".
+_DOTS_AND_SPACES = re.compile(r"[\s.]*")
+
+# A percent-escape such as "%2F" or "%20". Callers pass plain values, so an escape is
+# either a value encoded by mistake, which would reach Amazon still encoded and name the
+# wrong thing, or an attempt to slip a separator past the checks below to a server that
+# decodes the path before routing.
+_PERCENT_ESCAPE = re.compile(r"%[0-9A-Fa-f]{2}")
+
+# ASCII control characters. No id contains one, and a server that stops reading at NUL
+# would see "..%00" as "..".
+_CONTROL = re.compile(r"[\x00-\x1f\x7f]")
+
+
+def _path_segment(operation_id: str, name: str, value: Any) -> str:
+    """``value`` as one percent-encoded path segment, or ``ValueError`` naming ``name``.
+
+    Without these checks a read-only operation could be sent to any other endpoint:
+    ``{"brandEntityId": "../sp/targets?x="}`` turns ``POST /stores/{brandEntityId}/insights``
+    into ``POST /sp/targets``, a write, sent as though it were the read that the caller,
+    or the MCP server's read-only guard, approved. A suspect value is refused rather than
+    encoded into something harmless: it is a mistake or an attack, never an id.
+    """
+
+    def refuse(reason: str) -> ValueError:
+        return ValueError(
+            f"{operation_id}: path parameter {name}={value!r} {reason}; pass the plain, "
+            "unencoded value of one path segment"
+        )
+
+    # str() would send None as "None", True as "True" and 1e17 as "1e+17", as though each
+    # were an id. bool is a subclass of int, so it is tested on its own.
+    if value is None or isinstance(value, bool | float):
+        raise refuse("must be a string or an integer id")
+    text = str(value)
+    if _PERCENT_ESCAPE.search(text):
+        raise refuse("is percent-encoded")
+    if any(sep in text for sep in _SEPARATORS):
+        raise refuse("contains '/', '\\', '?' or '#'")
+    if _CONTROL.search(text):
+        raise refuse("contains a control character")
+    # Only the part before the first ";" is tested, for a server that decodes "%3B" back
+    # to ";" and then cuts the segment there. Without a ";" that part is the whole value.
+    if _DOTS_AND_SPACES.fullmatch(text.split(";", 1)[0]):
+        raise refuse("is empty or only dots and spaces")
+    try:
+        # No escape is left in the value, so every "%" is literal and goes out as "%25":
+        # Amazon decodes the segment once to the value itself, and decoding it again
+        # changes nothing.
+        return quote(text, safe=_SEGMENT_SAFE)
+    except UnicodeEncodeError:
+        # A lone surrogate such as "\ud800" has no UTF-8 form.
+        raise refuse("is not valid Unicode text") from None
 
 
 @dataclass(frozen=True)
