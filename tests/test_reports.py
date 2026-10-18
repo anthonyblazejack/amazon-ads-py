@@ -9,8 +9,8 @@ import respx
 from httpx import Request, Response
 
 from amazon_ads import ProfileClient, ReportFailedError
-from amazon_ads.reports import Reports, date_chunks, parse_report_file
-from tests.conftest import NA
+from amazon_ads.reports import Reports, ReportStatus, date_chunks, parse_report_file
+from tests.conftest import NA, Sleeps
 
 DOWNLOAD = "https://offline-report-storage.s3.amazonaws.com/report"
 
@@ -131,3 +131,36 @@ def test_a_report_id_cannot_send_the_request_to_another_endpoint(
     with pytest.raises(ValueError, match="reportId"):
         getattr(us.reports, method)("../../sb/keywords/123")
     assert not api.calls
+
+
+def test_an_expired_download_url_with_no_replacement_fails_at_once(
+    api: respx.MockRouter, us: ProfileClient, sleeps: Sleeps
+) -> None:
+    # Amazon answers an expired pre-signed URL with 403, and here the refreshed status
+    # carries no new URL. download() used to fetch "" instead, which httpx refuses with a
+    # transport error, so it was retried with backoff for up to two minutes and then
+    # failed with a message that named no report.
+    api.get(DOWNLOAD).mock(return_value=Response(403))
+    api.get(f"{NA}/reporting/reports/r-1").mock(
+        return_value=Response(200, json={"reportId": "r-1", "status": "COMPLETED"})
+    )
+    expired = ReportStatus.from_api({"reportId": "r-1", "status": "COMPLETED", "url": DOWNLOAD})
+    with pytest.raises(ReportFailedError, match="r-1"):
+        us.reports.download(expired)
+    assert not sleeps
+
+
+@pytest.mark.parametrize("expired", [400, 403])
+def test_an_expired_download_url_is_replaced_from_a_fresh_status(
+    api: respx.MockRouter, us: ProfileClient, expired: int
+) -> None:
+    # A pre-signed URL expires after an hour, and Amazon answers it with 400 or 403. The
+    # report's fresh status carries a new URL, which is the one to download.
+    renewed = f"{DOWNLOAD}-renewed"
+    api.get(DOWNLOAD).mock(return_value=Response(expired))
+    api.get(renewed).mock(return_value=Response(200, content=b'{"a": 1}\n'))
+    api.get(f"{NA}/reporting/reports/r-1").mock(
+        return_value=Response(200, json={"reportId": "r-1", "status": "COMPLETED", "url": renewed})
+    )
+    stale = ReportStatus.from_api({"reportId": "r-1", "status": "COMPLETED", "url": DOWNLOAD})
+    assert us.reports.download(stale) == [{"a": 1}]

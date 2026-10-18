@@ -38,6 +38,10 @@ All notable changes to this project are documented here. The format follows
   without `=` or a name, or a name given twice. These used to end in a Python traceback
   after the confirmation and the profile lookup, and a repeated name silently kept only
   the last value.
+- `Reports.download` raises `ReportFailedError`, naming the report, as soon as an
+  expired download URL has no replacement. It used to fetch an empty URL instead, which
+  the transport retried with backoff for up to two minutes before failing with httpx's
+  missing-protocol error.
 - The catalog lists the path parameters of four marketing mix modeling operations,
   whose spec writes `{brandGroupId}` and `{reportId}` into their paths without
   declaring them, so `ops show` said they took none. `scripts/generate_catalog.py` now

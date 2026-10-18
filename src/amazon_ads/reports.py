@@ -566,12 +566,19 @@ class Reports:
         try:
             raw = self._client.account.transport.download(status.url)
         except ApiError as exc:
-            # An expired pre-signed URL answers 400 or 403; a fresh status has a new one.
-            if exc.status_code in {400, 403}:
-                fresh = self.status(status.report_id).url or ""
-                raw = self._client.account.transport.download(fresh)
-            else:
+            # An expired pre-signed URL answers 400 or 403, and a fresh status normally
+            # carries a new one.
+            if exc.status_code not in {400, 403}:
                 raise
+            fresh = self.status(status.report_id)
+            if not fresh.url:
+                raise ReportFailedError(
+                    f"Report {status.report_id}'s download URL expired and Amazon gave no "
+                    f"new one (status {fresh.status})",
+                    report_id=status.report_id,
+                    status=fresh.status,
+                ) from exc
+            raw = self._client.account.transport.download(fresh.url)
         return parse_report_file(raw)
 
     def delete(self, report_id: str) -> None:
