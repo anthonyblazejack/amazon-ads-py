@@ -119,3 +119,15 @@ def test_report_file_parsing_handles_gzip_plain_and_json_lines() -> None:
     assert parse_report_file(gzip.compress(json.dumps(rows).encode())) == rows
     assert parse_report_file(b'{"a": 1}\n{"a": 2}\n') == rows
     assert parse_report_file(b"") == []
+
+
+@pytest.mark.parametrize("method", ["status", "delete"])
+def test_a_report_id_cannot_send_the_request_to_another_endpoint(
+    api: respx.MockRouter, us: ProfileClient, method: str
+) -> None:
+    # status() and delete() put the caller's report id into the path, and wait() and
+    # download() go through status(). Unchecked, "../../sb/keywords/123" made delete()
+    # send DELETE /sb/keywords/123, which archives a Sponsored Brands keyword.
+    with pytest.raises(ValueError, match="reportId"):
+        getattr(us.reports, method)("../../sb/keywords/123")
+    assert not api.calls

@@ -47,25 +47,30 @@ documents.
 Each path parameter fills exactly one segment of the operation's path, and Amazon reads
 back exactly the value you pass. Pass plain values, never percent-encoded ones:
 
-- Letters, digits and `-._~:@!$&'()*+,=` are sent as they are, so ids such as
+- Letters, digits and `-._~:@!$&'()*,=` are sent as they are, so ids such as
   `amzn1.ads-account.g.EXAMPLE` arrive unchanged.
-- Everything else is percent-encoded, including `%`, `;`, spaces and non-ASCII letters:
-  `"100% Pure"` is sent as `100%25%20Pure`.
+- Everything else is percent-encoded, including `%`, `;`, `+`, spaces and non-ASCII
+  letters: `"100% Pure"` is sent as `100%25%20Pure`. (Some servers cut a segment at a
+  raw `;`, or read a raw `+` as a space.)
 - A value that is already percent-encoded (it contains an escape such as `%20` or `%2F`)
   raises `ValueError`. Sending it encoded a second time would make Amazon read
   `My%20Brand` as those ten characters, not as `My Brand`. A literal `%` followed by two
   hex digits therefore cannot be sent.
 - A value that could send the request to a different endpoint than the operation's
   raises `ValueError` naming the parameter, before anything is sent: one that contains
-  `/`, `\`, `?`, `#` or a control character, or that is empty or only dots and spaces
-  (also counting only the part before a `;`). `{"brandEntityId": "../sp/targets?x="}`
-  would otherwise turn the read-only `stores:getInsightsForStoreAPI` into
-  `POST /sp/targets`.
-- `None`, `True`/`False` and floats raise `ValueError` too, rather than being sent as
-  `None`, `True` or `1e+17`. Pass ids as strings or integers.
+  `/`, `\`, `?`, `#` or a control character, or that is empty or only dots and spaces,
+  in whole or before its first `;`. `{"brandEntityId": "../sp/targets?x="}` would
+  otherwise turn the read-only `stores:getInsightsForStoreAPI` into `POST /sp/targets`.
+- Anything but a string or an integer raises `ValueError` too: `None`, a bool, a float
+  or bytes would otherwise be sent as `None`, `True`, `1e+17` or `b'7'`. Pass a
+  `uuid.UUID` as `str(value)`.
 
-Every `{placeholder}` in the path must be filled, including the few that Amazon's specs
-leave out of the operation's parameter list.
+Every `{placeholder}` in the path must be filled, even one that a spec leaves out of the
+operation's parameter list.
+
+To put a value into the path of a raw `us.request(...)`, check and encode it the same
+way with `catalog.path_segment(operation_id, name, value)`. The operation id and the name
+only label the error.
 
 ## Where the live API disagrees with the spec
 
@@ -142,7 +147,9 @@ adsctl ops call reporting:getAsyncReport -m US -p reportId=abc-123
 
 `ops call` asks for confirmation before any operation that can change data, and
 refuses the `mcp-*` tools without asking. `ops search --include-unsupported` lists those
-tools too.
+tools too. A `-p` value that would leave its path segment, a `-p` or `-q` without `=` or
+a name, and a name given twice are usage errors, reported before the confirmation and
+before anything is sent.
 
 ## Keeping the catalog current
 

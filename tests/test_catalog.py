@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from urllib.parse import unquote
+import re
+from dataclasses import replace
+from urllib.parse import unquote, unquote_plus
 
 import httpx
 import pytest
@@ -32,8 +34,14 @@ def test_every_operation_can_be_sent() -> None:
     for op in catalog.operations():
         assert op.method in {"GET", "POST", "PUT", "DELETE", "PATCH"}, op.id
         assert op.path.startswith("/"), op.id
-        for name in op.path_params:
-            assert "{" + name + "}" in op.path, op.id
+        # format_path checks each value as one whole segment. A placeholder that shares a
+        # segment with other text ("/x/{a}{b}" or "/x/{a}.") would let accepted values
+        # combine with it into "..".
+        segments = op.path.split("/")
+        assert all(re.fullmatch(r"\{[^{}]+\}|[^{}]*", s) for s in segments), op.id
+        # Every placeholder is listed, including any a spec forgot to declare, so
+        # `ops show` and search results name every value a call needs.
+        assert sorted(op.path_params) == sorted(re.findall(r"\{([^{}]+)\}", op.path)), op.id
 
 
 def test_sp_media_types_match_what_the_typed_layer_sends() -> None:
@@ -343,38 +351,40 @@ def test_operations_named_in_mcp_refusals_can_be_called() -> None:
 @pytest.mark.parametrize(
     "value",
     [
-        "../sp/targets?x=",
-        "..",
-        ".",
-        "",
-        "a/b",
-        "a?b",
-        "a#b",
-        "a\\b",
-        "..%2Fsp%2Ftargets",
-        "a%2fb",
-        "%2E%2E",
-        "a%3Fb",
-        "a%23b",
-        "a%5Cb",
-        "%252F",
-        "..;",
-        "..;x",
-        ".;x",
-        ";x",
-        "...",
-        ".. ",
-        " ",
-        "..\x00",
+        pytest.param("../sp/targets?x=", id="traversal-with-query"),
+        pytest.param("a/b", id="slash"),
+        pytest.param("a\\b", id="backslash"),
+        pytest.param("a?b", id="query"),
+        pytest.param("a#b", id="fragment"),
+        pytest.param("..", id="dot-dot"),
+        pytest.param(".", id="dot"),
+        pytest.param("", id="empty"),
+        pytest.param(" ", id="blank"),
+        pytest.param("...", id="trailing-dots-trimmed-by-some-servers"),
+        pytest.param(".. ", id="trailing-space-trimmed-by-some-servers"),
+        pytest.param("..;x", id="servlet-cuts-at-semicolon"),
+        pytest.param(";x", id="empty-before-semicolon"),
+        pytest.param("..\x00", id="nul-ends-the-segment-for-some-servers"),
+        # Encoded separators, for a server that decodes the path before routing. Each
+        # would get past a rule that decoded once, or refused only %2F and %2E.
+        pytest.param("..%2Fsp%2Ftargets", id="encoded-slash"),
+        pytest.param("a%2fb", id="encoded-slash-lowercase-hex"),
+        pytest.param("%2E%2E", id="encoded-dots"),
+        pytest.param("a%3Fb", id="encoded-query"),
+        pytest.param("a%23b", id="encoded-fragment"),
+        pytest.param("a%5Cb", id="encoded-backslash"),
+        pytest.param("%252F", id="double-encoded-slash"),
+        # Not an attack but a mistake: Amazon would read it back as the ten characters
+        # "My%20Brand" and answer for a brand that does not exist instead of failing.
+        pytest.param("My%20Brand", id="encoded-by-mistake"),
     ],
 )
 def test_call_refuses_a_path_parameter_that_leaves_its_segment(
     api: respx.MockRouter, us: ProfileClient, value: str
 ) -> None:
-    # Each of these reaches a different path than the operation's, either as httpx sends
-    # it or as a server reads it after percent-decoding, cutting a segment at ";",
-    # trimming trailing dots and spaces, or stopping at NUL. A read-only operation could
-    # then be pointed at a write.
+    # Unchecked, each of these reaches a different path than the operation's, as httpx
+    # sends it or as some server reads it, so a read-only operation could be pointed at a
+    # write such as POST /sp/targets.
     with pytest.raises(ValueError, match="brandEntityId"):
         us.call("stores:getInsightsForStoreAPI", {}, path_params={"brandEntityId": value})
     assert not api.calls
@@ -387,6 +397,9 @@ def test_ordinary_ids_fill_the_path_unchanged(api: respx.MockRouter, us: Profile
     # Amazon's amzn1 ids carry "." and ":", which must not be encoded or dropped.
     account = "amzn1.ads-account.g.EXAMPLE0123:a_b~c"
     assert op.format_path({"reportId": account}) == f"/reporting/reports/{account}"
+    # Ids read from a pandas DataFrame are numpy integers, which are not int.
+    numpy = pytest.importorskip("numpy")
+    assert op.format_path({"reportId": numpy.int64(42)}) == "/reporting/reports/42"
 
     route = api.get(f"{NA}/reporting/reports/abc-123").mock(
         return_value=Response(200, json={"reportId": "abc-123", "status": "PENDING"})
@@ -404,9 +417,9 @@ def test_ordinary_ids_fill_the_path_unchanged(api: respx.MockRouter, us: Profile
         "50+ Ideas",
         "a;b",
         "{categoryId}",
-        # Fullwidth "A/B": its solidus is not "/", so it is encoded, not refused.
+        # Fullwidth "A/B", as Japanese brand names write it. Its solidus is not "/", so
+        # it is encoded, not refused.
         "\uff21\uff0f\uff22",
-        "ブランド　名",
     ],
 )
 def test_a_path_parameter_reaches_amazon_as_the_exact_value(brand: str) -> None:
@@ -416,33 +429,33 @@ def test_a_path_parameter_reaches_amazon_as_the_exact_value(brand: str) -> None:
     sent = httpx.URL(NA + path).raw_path.decode().split("/")
     assert sent[:3] == ["", "benchmarks", "brands"]
     assert sent[4:] == ["categories", "7"]
-    assert unquote(sent[3]) == brand
+    # A server that decodes the path the way HTML forms are decoded reads "+" as a space;
+    # both readings must give the value back.
+    assert unquote(sent[3]) == unquote_plus(sent[3]) == brand
+    # Java servlet containers cut a raw ";x" off the segment. unquote() forgives a stray
+    # "%", so check that every "%" sent starts a complete escape.
+    assert ";" not in sent[3]
+    assert re.fullmatch(r"(?:[^%]|%[0-9A-F]{2})*", sent[3])
 
 
-def test_every_placeholder_must_be_filled_even_if_the_spec_does_not_declare_it() -> None:
-    # Amazon's marketing mix modeling spec leaves {reportId} out of the operation's
-    # parameters, so the catalog lists none for it.
-    op = catalog.get("marketing-mix-modeling:getMmmReport")
-    assert "{reportId}" in op.path
+def test_a_placeholder_the_spec_does_not_declare_is_still_filled_and_checked() -> None:
+    # Amazon's marketing mix modeling spec leaves {reportId} out of its operations'
+    # parameters. format_path reads placeholders from the path itself, so a value is still
+    # required and checked whatever path_params says. The declaration is dropped here so
+    # the test does not depend on how the catalog was generated.
+    op = replace(catalog.get("reporting:getAsyncReport"), path_params=())
     with pytest.raises(ValueError, match="reportId"):
         op.format_path({})
     with pytest.raises(ValueError, match="reportId"):
         op.format_path({"reportId": "../../sp/targets"})
+    assert op.format_path({"reportId": "r1"}) == "/reporting/reports/r1"
 
 
-@pytest.mark.parametrize("brand", ["My%20Brand", "%41", "caf%C3%A9"])
-def test_a_percent_encoded_value_is_refused_rather_than_sent_encoded_twice(brand: str) -> None:
-    # Amazon would read "My%20Brand" back as those ten characters, not "My Brand", and
-    # answer for a brand that does not exist instead of failing.
-    op = catalog.get("sponsored-brands-category-benchmark:getTimeSeries")
-    with pytest.raises(ValueError, match="brandName"):
-        op.format_path({"brandName": brand, "categoryId": "7"})
-
-
-@pytest.mark.parametrize("value", [None, True, 1.5, 1e17, "\ud800"])
+@pytest.mark.parametrize("value", [None, True, 1.5, 1e17, b"7", ["7"], "\ud800"])
 def test_a_value_that_is_not_id_text_is_refused_by_name(value: object) -> None:
-    # str() would send None as "None" and 1e17 as "1e+17", and a lone surrogate cannot
-    # be encoded at all; each must fail naming the parameter, not reach Amazon.
+    # str() would send None as "None", 1e17 as "1e+17", b"7" as "b'7'" and ["7"] as
+    # "['7']", and a lone surrogate cannot be encoded at all. Each must fail naming the
+    # parameter rather than reach Amazon as a wrong id.
     op = catalog.get("reporting:getAsyncReport")
     with pytest.raises(ValueError, match="reportId"):
         op.format_path({"reportId": value})

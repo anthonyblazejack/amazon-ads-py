@@ -113,3 +113,8 @@ adsctl ops call OPERATION_ID -m US [--body JSON|@file.json] [-p name=value]... [
 It refuses the `mcp-*` tools of Amazon's hosted MCP server without asking: they are not
 Ads API endpoints. `ops search` leaves them out unless `--include-unsupported` is given
 or `--api` names one, and `ops show` prints the reason as `unsupported_reason`.
+
+`-p` and `-q` take plain `name=value` pairs. A pair without `=` or a name, a name given
+twice, or a path parameter that would leave its path segment (see
+[path parameters](guide/any-endpoint.md#path-parameters)) is a usage error, reported
+before the confirmation and before anything is sent.

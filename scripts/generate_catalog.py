@@ -16,6 +16,7 @@ no timestamps), so a diff after regenerating means something is stale.
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -117,6 +118,12 @@ def operations(slug: str, spec: dict[str, Any]) -> list[dict[str, Any]]:
                     query.append(entry)
                 elif where == "header" and name.lower() not in AUTH_HEADERS:
                     headers.append(entry)
+            # Some specs put a placeholder in the path without declaring it as a parameter
+            # (Amazon's marketing mix modeling spec never declares {brandGroupId} or
+            # {reportId}). The path is what gets sent, so list every placeholder in it.
+            for name in re.findall(r"\{([^{}]+)\}", path):
+                if name not in path_params:
+                    path_params.append(name)
 
             body = deref(spec, op.get("requestBody")) or {}
             content_types = sorted((body.get("content") or {}).keys())

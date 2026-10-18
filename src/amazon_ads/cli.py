@@ -696,21 +696,39 @@ def ops_call(
 ) -> None:
     """Call any operation by id and print the JSON response."""
     op = catalog.get(operation)
-    # Refuse an operation this client cannot send before asking whether to send it.
+    # Refuse an operation this client cannot send, or a path parameter that would send it
+    # to a different endpoint, before asking whether to send it and before the market's
+    # profile is looked up, which already calls Amazon.
     op.ensure_sendable()
+    path_values = _name_values("'-p' / '--path-param'", path_params)
+    query_values = _name_values("'-q' / '--query'", query)
+    try:
+        op.format_path(path_values)
+    except ValueError as exc:
+        raise click.BadParameter(str(exc), param_hint="'-p' / '--path-param'") from None
     if not op.read_only and not yes:
         click.confirm(f"{op.id} ({op.method} {op.path}) can change data. Send it?", abort=True)
     payload = None
     if body:
         text = Path(body[1:]).read_text() if body.startswith("@") else body
         payload = json.loads(text)
-    response = ctx.profile(market).call(
-        op.id,
-        payload,
-        path_params=dict(p.split("=", 1) for p in path_params),
-        query=dict(q.split("=", 1) for q in query),
-    )
+    response = ctx.profile(market).call(op.id, payload, path_params=path_values, query=query_values)
     click.echo(json.dumps(response, indent=2, default=str))
+
+
+def _name_values(option: str, pairs: tuple[str, ...]) -> dict[str, str]:
+    """``name=value`` options as a dict. A pair without "=" or a name is a usage error
+    rather than a traceback, and so is a name given twice, which would otherwise keep
+    only the last value without saying so."""
+    values: dict[str, str] = {}
+    for pair in pairs:
+        name, sep, value = pair.partition("=")
+        if not sep or not name:
+            raise click.BadParameter(f"{pair!r} is not name=value", param_hint=option)
+        if name in values:
+            raise click.BadParameter(f"{name} is given twice", param_hint=option)
+        values[name] = value
+    return values
 
 
 if __name__ == "__main__":  # pragma: no cover

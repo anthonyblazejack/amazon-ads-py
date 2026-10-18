@@ -144,39 +144,28 @@ def test_creating_targets_through_call_operation_is_refused(
 
 
 def test_a_path_parameter_cannot_turn_a_read_into_a_write(
-    api: respx.MockRouter, tools: AdsTools
+    api: respx.MockRouter, ads: AmazonAds, tmp_path: Path
 ) -> None:
     # The stores insights operation is a read-only POST, so call_operation allows it.
-    # "../sp/targets?x=" would resolve its path to POST /sp/targets, a write that skips
-    # the plan approval and is retried on a 503 because the operation looked read-only.
-    targets = api.post(f"{NA}/sp/targets").mock(
+    # "../sp/targets?x=" used to resolve its path to POST /sp/targets: a write made with
+    # no plan, and retried after a 503 because the operation looked read-only. The call
+    # must be refused before anything is sent, including the profile lookup a market's
+    # first call makes, which is why no profile is cached here.
+    api.get(f"{NA}/v2/profiles").mock(
+        return_value=Response(200, json=[{"profileId": US_PROFILE, "countryCode": "US"}])
+    )
+    api.get(path="/v2/profiles").mock(return_value=Response(200, json=[]))
+    api.post(f"{NA}/sp/targets").mock(
         side_effect=[Response(503), Response(207, json={"targets": {"success": []}})]
     )
     with pytest.raises(ValueError, match="brandEntityId"):
-        tools.call_operation(
+        AdsTools(ads, plan_dir=tmp_path).call_operation(
             "US",
             "stores:getInsightsForStoreAPI",
             {"startDate": "2026-01-01", "endDate": "2026-01-31"},
             path_params={"brandEntityId": "../sp/targets?x="},
         )
-    assert not targets.called
-    assert not api.calls
-
-
-def test_a_refused_path_parameter_sends_nothing_before_profiles_are_known(
-    api: respx.MockRouter, ads: AmazonAds, tmp_path: Path
-) -> None:
-    # Resolving a market fetches the profile list from every region on first use; a call
-    # that is going to be refused must not reach Amazon even for that.
-    api.get(f"{NA}/v2/profiles").mock(
-        return_value=Response(200, json=[{"profileId": US_PROFILE, "countryCode": "US"}])
-    )
-    api.get(path="/v2/profiles").mock(return_value=Response(200, json=[]))
-    with pytest.raises(ValueError, match="brandEntityId"):
-        AdsTools(ads, plan_dir=tmp_path).call_operation(
-            "US", "stores:getInsightsForStoreAPI", {}, path_params={"brandEntityId": ".."}
-        )
-    assert not api.calls
+    assert not api.calls, [str(call.request.url) for call in api.calls]
 
 
 def test_plan_ids_cannot_escape_the_plan_directory(tools: AdsTools) -> None:

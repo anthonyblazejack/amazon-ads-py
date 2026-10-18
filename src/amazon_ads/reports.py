@@ -29,6 +29,7 @@ from dataclasses import dataclass, field
 from datetime import date, timedelta
 from typing import TYPE_CHECKING, Any
 
+from amazon_ads.catalog import path_segment
 from amazon_ads.errors import ApiError, ReportFailedError
 
 if TYPE_CHECKING:
@@ -388,6 +389,13 @@ def date_chunks(start: date, end: date, max_days: int = MAX_DAYS) -> list[tuple[
 _DUPLICATE = re.compile(r"duplicate of\s*:?\s*([0-9a-fA-F-]{8,})")
 
 
+def _report_path(operation_id: str, report_id: str) -> str:
+    # The caller's report id fills one path segment and is checked like a catalogued path
+    # parameter. Unchecked, "../../sb/keywords/123" would turn delete() into
+    # DELETE /sb/keywords/123, which archives a Sponsored Brands keyword.
+    return "/reporting/reports/" + path_segment(operation_id, "reportId", report_id)
+
+
 class Reports:
     def __init__(
         self,
@@ -514,7 +522,8 @@ class Reports:
         return str(response.json()["reportId"])
 
     def status(self, report_id: str) -> ReportStatus:
-        response = self._client.request("GET", f"/reporting/reports/{report_id}", accept=GET_ACCEPT)
+        path = _report_path("reporting:getAsyncReport", report_id)
+        response = self._client.request("GET", path, accept=GET_ACCEPT)
         return ReportStatus.from_api(response.json())
 
     def wait(
@@ -567,7 +576,8 @@ class Reports:
 
     def delete(self, report_id: str) -> None:
         """Cancel a pending report."""
-        self._client.request("DELETE", f"/reporting/reports/{report_id}", accept=DELETE_ACCEPT)
+        path = _report_path("reporting:deleteAsyncReport", report_id)
+        self._client.request("DELETE", path, accept=DELETE_ACCEPT)
 
     @staticmethod
     def _warn_retention(report: str | dict[str, Any], start: date) -> None:

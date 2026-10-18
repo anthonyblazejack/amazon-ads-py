@@ -87,3 +87,61 @@ def test_ops_call_asks_before_creating_targets(
     assert "can change data. Send it?" in result.output
     assert result.exit_code == 1
     assert not api.calls
+
+
+@pytest.mark.parametrize(
+    ("args", "option", "reason"),
+    [
+        pytest.param(
+            ["-p", "reportId=../../sb/keywords/123"],
+            "--path-param",
+            "contains '/'",
+            id="leaves-segment",
+        ),
+        pytest.param([], "--path-param", "needs path parameters", id="missing"),
+        pytest.param(["-p", "reportId"], "--path-param", "is not name=value", id="no-equals"),
+        pytest.param(["-p", "=r-1"], "--path-param", "is not name=value", id="no-name"),
+        pytest.param(
+            ["-p", "reportId=r-1", "-p", "reportId=r-2"],
+            "--path-param",
+            "given twice",
+            id="twice",
+        ),
+        pytest.param(
+            ["-p", "reportId=r-1", "-q", "x"], "--query", "is not name=value", id="query-no-equals"
+        ),
+        pytest.param(
+            ["-p", "reportId=r-1", "-q", "=x"], "--query", "is not name=value", id="query-no-name"
+        ),
+    ],
+)
+def test_ops_call_refuses_bad_parameters_before_asking_or_sending(
+    api: respx.MockRouter,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    args: list[str],
+    option: str,
+    reason: str,
+) -> None:
+    # Each of these used to surface as a Python traceback, after the write confirmation
+    # had been answered and after the profile lookup had called Amazon; a name given
+    # twice silently kept the last value. "../../sb/keywords/123" would have turned the
+    # confirmed DELETE of a report into DELETE /sb/keywords/123. No answer is fed to the
+    # prompt, and the respx router and empty credentials keep a regression from reaching
+    # Amazon.
+    for name in [n for n in os.environ if n.startswith("AMAZON_ADS_")]:
+        monkeypatch.delenv(name)
+    empty_env = tmp_path / "empty.env"
+    empty_env.write_text("")
+    result = CliRunner().invoke(
+        cli,
+        [
+            *("--env-file", str(empty_env), "ops", "call", "reporting:deleteAsyncReport"),
+            *("-m", "US", *args),
+        ],
+    )
+    assert result.exit_code == 2, result.output
+    assert option in result.output
+    assert reason in result.output
+    assert "Send it?" not in result.output
+    assert not api.calls

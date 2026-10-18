@@ -271,7 +271,7 @@ class ProfileClient:
         """
         op = catalog.get(operation)
         op.ensure_sendable()
-        path = op.format_path(dict(path_params or {}))
+        path = op.format_path(path_params)
         chosen_type = content_type or (op.content_type if op.has_body else None)
         response = self.request(
             op.method,

@@ -17,17 +17,31 @@ All notable changes to this project are documented here. The format follows
   user's approval, and retried after a 5xx because the operation it started as is
   read-only. `adsctl ops call` skipped its confirmation the same way. A path parameter
   now raises `ValueError` naming it, before anything is sent, when it contains `/`, `\`,
-  `?`, `#` or a control character; when it is empty or only dots and spaces, also
-  counting only the part before a `;` (which Java servlet containers cut off); when it
-  is already percent-encoded (`%2F`, `%20`); or when it is `None`, a bool or a float.
-  `call_operation` refuses it before even looking up the market's profile. Every other
-  value is percent-encoded so Amazon reads back exactly what was given: letters, digits
-  and `-._~:@!$&'()*+,=` are sent as before, which keeps ids such as
-  `amzn1.ads-account.g.EXAMPLE` unchanged, and `%`, `;`, spaces and non-ASCII letters
-  are encoded. A value that was already percent-encoded used to be sent as it was and
-  now raises, so pass plain values. Path placeholders that a spec leaves out of the
-  operation's parameters (four marketing mix modeling operations) must now be filled
+  `?`, `#` or a control character; when it is empty or only dots and spaces, in whole
+  or before its first `;` (Java servlet containers cut a segment at `;`); when it is
+  already percent-encoded (`%2F`, `%20`); or when it is not a string or an integer
+  (`None`, a bool, a float, bytes). `call_operation` and `adsctl ops call` refuse it
+  before even looking up the market's profile. Every other value is percent-encoded so
+  Amazon reads back exactly what was given: letters, digits and `-._~:@!$&'()*,=` are
+  sent as before, which keeps ids such as `amzn1.ads-account.g.EXAMPLE` unchanged, and
+  `%`, `;`, `+`, spaces and non-ASCII letters are encoded (`+` because a server that
+  decodes paths like form data reads it as a space). A value that was already
+  percent-encoded used to be sent as it was and now raises, so pass plain values. Path
+  placeholders that a spec leaves out of the operation's parameters must now be filled
   too; before, the request went out with the placeholder still in the path.
+- `Reports.status`, `wait`, `download` (given an id) and `delete` check the report id
+  the same way. `reports.delete("../../sb/keywords/123")` sent
+  `DELETE /sb/keywords/123`, which archives a Sponsored Brands keyword; it now raises
+  `ValueError`.
+- `adsctl ops call` reports a bad `-p` or `-q` as a usage error (exit code 2) before it
+  asks for confirmation or contacts Amazon: a path parameter refused as above, a pair
+  without `=` or a name, or a name given twice. These used to end in a Python traceback
+  after the confirmation and the profile lookup, and a repeated name silently kept only
+  the last value.
+- The catalog lists the path parameters of four marketing mix modeling operations,
+  whose spec writes `{brandGroupId}` and `{reportId}` into their paths without
+  declaring them, so `ops show` said they took none. `scripts/generate_catalog.py` now
+  adds any placeholder a spec leaves undeclared.
 - `advertising-billing:getAdvertiserInvoices` (GET /invoices) and
   `advertising-billing:getInvoice` (GET /invoices/{invoiceId}) now send
   `Accept: application/json`. Amazon's spec documents only
@@ -102,6 +116,8 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `catalog.path_segment(operation_id, name, value)` checks and encodes one path segment
+  the way `ProfileClient.call` does, for a path built by hand for `ProfileClient.request`.
 - `UnsupportedOperationError`, `Operation.unsupported_reason`, `Operation.note`,
   `Operation.ensure_sendable()`, `catalog.CORRECTIONS`, `catalog.is_hosted_mcp_tool()`,
   `catalog.search(include_unsupported=True)` and `adsctl ops search
