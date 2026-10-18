@@ -3,10 +3,10 @@
 A typed Python client, command line tool and MCP server for the
 [Amazon Ads API](https://advertising.amazon.com/API/docs/en-us).
 
-- **Every endpoint.** All 1,204 operations in the 220 API specs Amazon publishes can be
-  called by id, with the right method, path and versioned media types. Sponsored
-  Products, suggested bids, change history, reports and profiles also have typed,
-  hand-written methods.
+- **Every endpoint.** All 1,094 operations in the 202 Ads API specs Amazon publishes can
+  be called by id, with the right method, path and versioned media types, corrected
+  where the live API refuses what its spec documents. Sponsored Products, suggested
+  bids, change history, reports and profiles also have typed, hand-written methods.
 - **Safe batch writes.** Amazon accepts or rejects each item in a batch on its own and
   answers 207 even when everything failed. Every write returns per-item results, and
   nothing is silently dropped.

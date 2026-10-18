@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
+import pytest
 from click.testing import CliRunner
 
+from amazon_ads import UnsupportedOperationError
 from amazon_ads.cli import _read_changes, cli, table
 
 
@@ -23,3 +26,33 @@ def test_ops_search_needs_no_credentials() -> None:
     result = CliRunner().invoke(cli, ["--json", "ops", "search", "keywords", "list"])
     assert result.exit_code == 0, result.output
     assert "/sp/keywords/list" in result.output
+
+
+def test_ops_call_refuses_an_mcp_tool_without_asking(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The write confirmation would ask to send a tool Amazon's Ads API hosts cannot
+    serve; it must be refused before the prompt and before any credentials are read. No
+    answer is fed to the prompt and no credentials are reachable, so a regression fails
+    here instead of reaching Amazon."""
+    monkeypatch.delenv("AMAZON_ADS_ENV_FILE", raising=False)
+    monkeypatch.chdir(tmp_path)
+    result = CliRunner().invoke(
+        cli, ["ops", "call", "mcp-account-management:update_account_name", "-m", "US"]
+    )
+    assert isinstance(result.exception, UnsupportedOperationError)
+    assert "Send it?" not in result.output
+
+
+def test_ops_search_lists_mcp_tools_only_when_asked() -> None:
+    hidden = CliRunner().invoke(cli, ["--json", "ops", "search", "list", "invoices"])
+    assert hidden.exit_code == 0, hidden.output
+    assert "mcp-billing:list_invoices" not in hidden.output
+    found = CliRunner().invoke(cli, ["--json", "ops", "search", "invoices"])
+    rows = {r["id"]: r for r in json.loads(found.output)}
+    assert "406" in rows["advertising-billing:getAdvertiserInvoices"]["note"]
+    shown = CliRunner().invoke(
+        cli, ["--json", "ops", "search", "list", "invoices", "--include-unsupported"]
+    )
+    assert "mcp-billing:list_invoices" in shown.output
+    assert "hosted Ads MCP server" in shown.output

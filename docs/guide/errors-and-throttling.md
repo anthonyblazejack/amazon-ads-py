@@ -18,6 +18,7 @@ Everything the library raises derives from `AmazonAdsError`.
 | `PartialFailureError` | Some batch items failed, from `raise_for_errors()` (`.result`) |
 | `ReportFailedError` | A report failed or timed out (`.report_id`, `.status`) |
 | `PlanDriftError` | A plan's before values no longer match the account (`.drifted`) |
+| `UnsupportedOperationError` | `call()` was given a catalog operation this client cannot send, such as an `mcp-*` tool of Amazon's hosted MCP server. Raised before any request. |
 
 Every `ApiError` carries `status_code`, Amazon's `code`, the message, the parsed `body`,
 the `method` and `url`, and `request_id` (Amazon support asks for this).

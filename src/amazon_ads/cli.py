@@ -642,17 +642,31 @@ def ops() -> None:
 @ops.command("search")
 @click.argument("text", nargs=-1, required=True)
 @click.option("--api", help="Limit to one API slug, e.g. sponsored-brands-v4.")
+@click.option(
+    "--include-unsupported",
+    is_flag=True,
+    help="Also list operations this client cannot send (the mcp-* tools of Amazon's MCP server).",
+)
 @pass_ctx
-def ops_search(ctx: Context, text: tuple[str, ...], api: str | None) -> None:
-    """Search operations by words in their id, path or summary."""
-    found = catalog.search(" ".join(text), api=api, limit=100)
-    emit(
-        ctx,
-        [
-            {"id": op.id, "method": op.method, "path": op.path, "summary": op.summary}
-            for op in found
-        ],
+def ops_search(
+    ctx: Context, text: tuple[str, ...], api: str | None, include_unsupported: bool
+) -> None:
+    """Search operations by words in their id, path or summary.
+
+    Operations this client cannot send are left out unless --include-unsupported is given
+    or --api names their API."""
+    found = catalog.search(
+        " ".join(text), api=api, limit=100, include_unsupported=include_unsupported
     )
+    rows = []
+    for op in found:
+        row = {"id": op.id, "method": op.method, "path": op.path, "summary": op.summary}
+        if op.note:
+            row["note"] = op.note
+        if op.unsupported_reason:
+            row["unsupported"] = op.unsupported_reason
+        rows.append(row)
+    emit(ctx, rows)
 
 
 @ops.command("show")
@@ -682,6 +696,8 @@ def ops_call(
 ) -> None:
     """Call any operation by id and print the JSON response."""
     op = catalog.get(operation)
+    # Refuse an operation this client cannot send before asking whether to send it.
+    op.ensure_sendable()
     if not op.read_only and not yes:
         click.confirm(f"{op.id} ({op.method} {op.path}) can change data. Send it?", abort=True)
     payload = None

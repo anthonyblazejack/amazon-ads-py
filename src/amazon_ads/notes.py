@@ -149,6 +149,54 @@ comes back as a per-item 207 error. The limits below were read from that page on
 - The creative and landing page belong to the ad, not the campaign, so changing which
   products an ad shows is an ad update and never a campaign update.
 
+## Billing invoices (GET /invoices, GET /invoices/{invoiceId})
+- Both answer 406 Not Acceptable with an empty body to the only Accept type their spec
+  documents: application/vnd.invoices.v1.1+json for the list and
+  application/vnd.invoice.v1.1+json for one invoice. The list refuses the v1 and v1.0
+  spellings too. application/json returns 200, so this client sends that for
+  advertising-billing:getAdvertiserInvoices and advertising-billing:getInvoice. Found on
+  2026-10-18: the list on all 12 marketplaces of the account tested, one invoice in the
+  US. India's profile answered the list with 404 and an empty body under
+  application/json, so there is nothing to read there.
+- Both answers are wrapped as {"status": "success", "payload": {...}}, while the spec
+  documents only what is inside payload. call() returns the body as Amazon sent it, so
+  read response["payload"].
+- The list pages with payload.nextCursor: pass it back as the cursor query parameter.
+  On the last page the key is absent, not null as the spec says. The spec also says
+  count cannot be combined with cursor.
+- The billing period still open is listed with status ACCUMULATING and has no id,
+  invoiceDate, toDate, fees or tax amounts, so it cannot be fetched with
+  GET /invoices/{invoiceId}. The invoiceStatuses filter does not offer ACCUMULATING,
+  although the enum of the status field includes it.
+- List summaries carried adProductGroup and countryCode, which the spec does not list. A
+  single invoice names its contact blocks issuerContactInformation,
+  payerContactInformation and thirdPartyContactInformation, where the spec says
+  issuerContactInfo, payerContactInfo and thirdPartyContactInfo, and its invoiceLines
+  carry campaignAID, which the spec does not list.
+- POST /invoiceSummaries/list (advertising-billing:GetBillingInvoiceSummaries) accepts
+  its spec's application/vnd.billingInvoiceSummary.v1+json for both Content-Type and
+  Accept. Its answer has no status/payload wrapper and carries invoiceSummaries at the
+  top level, where the spec nests them under aggregation. A nextToken came back beside
+  them when maxResults cut the list short.
+
+## mcp-* operations are tools of Amazon's hosted MCP server
+- Amazon's docs publish 18 specs under "Betas > MCP Tools (beta) > Tools", which the
+  catalog lists as the mcp-* APIs. They describe the tools of Amazon's hosted Ads MCP
+  server, not Ads API endpoints: every operation in them is POST /mcp/<tool_name>, and
+  they name no server and document no response.
+- The Ads API hosts (NA, EU and FE) have no route for those paths. POST
+  /mcp/list_invoices answers 403 "Invalid key=value pair (missing equal-sign) in
+  Authorization header", which reads like a demand for AWS request signing, but a
+  made-up path such as GET /no-such-route gets the same answer: it is how the hosts
+  answer any path they do not serve.
+- This client refuses mcp-* operations with UnsupportedOperationError before sending
+  anything, and search leaves them out unless asked. For invoices use
+  advertising-billing:getAdvertiserInvoices, getInvoice or GetBillingInvoiceSummaries.
+- Amazon's get-started page for these tools says MCP clients reach them at
+  https://advertising-ai.amazon.com/mcp (advertising-ai-eu and advertising-ai-fe for EU
+  and FE) with an Amazon-Ads-ClientId header and a Login with Amazon bearer token. This
+  library has not tried that server.
+
 ## Profiles and regions
 - Profiles live on three regional hosts (NA, EU, FE). Australia and Japan are FE; the UK
   and India are EU. One consent through amazon.com can cover all three.

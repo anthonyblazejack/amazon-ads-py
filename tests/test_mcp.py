@@ -7,7 +7,7 @@ import pytest
 import respx
 from httpx import Response
 
-from amazon_ads import AmazonAds
+from amazon_ads import AmazonAds, ProfileClient, UnsupportedOperationError
 from amazon_ads.mcp.server import AdsTools, aggregate, build_server
 from amazon_ads.models import Profile
 from tests.conftest import NA, US_PROFILE
@@ -79,6 +79,52 @@ def test_drift_is_reported_not_applied(api: respx.MockRouter, tools: AdsTools) -
 def test_raw_calls_that_can_write_are_refused(tools: AdsTools) -> None:
     with pytest.raises(PermissionError):
         tools.call_operation("US", "sponsored-products:UpdateSponsoredProductsKeywords", {})
+
+
+@pytest.mark.parametrize(
+    "operation",
+    [
+        # read_only classifies this one as a read.
+        "mcp-billing:list_invoices",
+        # read_only classifies this one as a write, so a check made after the read_only
+        # check would answer "use plan_update", which cannot rename an account.
+        "mcp-account-management:update_account_name",
+    ],
+)
+def test_call_operation_refuses_mcp_tools_for_what_they_are(
+    api: respx.MockRouter,
+    tools: AdsTools,
+    operation: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The server must refuse on its own, not rely on ProfileClient.call doing it later:
+    resolving the market's profile first can already mean a token and a profiles call."""
+
+    def must_not_be_reached(*args: object, **kwargs: object) -> None:
+        raise AssertionError("call_operation reached ProfileClient.call")
+
+    monkeypatch.setattr(ProfileClient, "call", must_not_be_reached)
+    with pytest.raises(UnsupportedOperationError, match="hosted Ads MCP server"):
+        tools.call_operation("US", operation, {})
+    assert not api.calls
+
+
+def test_search_operations_offers_agents_no_mcp_tools_and_explains_corrections(
+    tools: AdsTools,
+) -> None:
+    rows = {r["id"]: r for r in tools.search_operations("invoices")}
+    assert not any(i.startswith("mcp-") or "unsupported" in r for i, r in rows.items())
+    assert "406" in rows["advertising-billing:getAdvertiserInvoices"]["note"]
+
+
+def test_search_operations_scoped_to_mcp_tools_says_why_they_cannot_be_called(
+    tools: AdsTools,
+) -> None:
+    """An agent that names an mcp- API should learn the tools are refused before it spends
+    a call finding out."""
+    rows = tools.search_operations("invoices", api="mcp-billing")
+    assert rows
+    assert all("hosted Ads MCP server" in r["unsupported"] for r in rows)
 
 
 def test_plan_ids_cannot_escape_the_plan_directory(tools: AdsTools) -> None:

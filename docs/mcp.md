@@ -63,8 +63,8 @@ If `amazon-ads-mcp` is not on the client's `PATH`, give the full path (for examp
 | `get_suggested_bids_for_new` | Suggested bids for keywords and ASIN targets before an ad group exists |
 | `get_change_history` | What changed, from what, to what, when |
 | `run_report` | Any preset over any range, as rows or grouped totals with CTR, CPC and ACOS |
-| `search_operations` | Search the ~1,200 operations in Amazon's specs |
-| `call_operation` | Call any read-only operation by id. Operations that can write are refused. |
+| `search_operations` | Search the ~1,100 Ads API operations in Amazon's specs. Rows with a `note` differ from the spec in a way the note explains. The `mcp-*` tools of Amazon's hosted MCP server are left out unless `api` names one. |
+| `call_operation` | Call any read-only operation by id. Operations that can write are refused, and so are the `mcp-*` tools, which are not Ads API endpoints; the refusal names the operation to use where one is known. |
 | `get_plan`, `list_plans` | Saved plans and whether each was applied |
 | `query_reports`, `sync_reports` | Warehouse SQL and sync (with `AMAZON_ADS_MCP_DB`) |
 

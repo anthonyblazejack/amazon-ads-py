@@ -141,6 +141,16 @@ class PlanDriftError(AmazonAdsError):
         self.drifted = drifted
 
 
+class UnsupportedOperationError(AmazonAdsError):
+    """The operation catalog lists this operation, but this client cannot send it.
+
+    Raised before any request is made. Today this covers the tools of Amazon's hosted Ads
+    MCP server: Amazon publishes them as OpenAPI files beside the Ads API specs, but their
+    ``POST /mcp/<tool>`` paths are not routes on the Ads API hosts. The message says why
+    and, where one is known, which Ads API operation to call instead.
+    """
+
+
 def error_class_for(status_code: int) -> type[ApiError]:
     if status_code == 400:
         return BadRequestError

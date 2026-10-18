@@ -20,6 +20,7 @@ from amazon_ads.errors import (
     ThrottledError,
     UnauthorizedError,
     UnprocessableError,
+    UnsupportedOperationError,
 )
 from amazon_ads.models import (
     AdGroup,
@@ -93,6 +94,7 @@ __all__ = [
     "ThrottledError",
     "UnauthorizedError",
     "UnprocessableError",
+    "UnsupportedOperationError",
     "Warehouse",
     "__version__",
 ]

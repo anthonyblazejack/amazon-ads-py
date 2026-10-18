@@ -50,6 +50,13 @@ workflow runs both scripts and opens a pull request when anything changed.
 When the typed layer changes which operations it wraps, update `WRAPPED_PREFIXES` in
 `scripts/generate_catalog.py` so the coverage page marks them.
 
+When the live API refuses a media type its own spec documents, add an entry to
+`CORRECTIONS` in `src/amazon_ads/catalog.py`, never a hand edit of `catalog.json`: the
+catalog applies corrections when it loads, so regenerating keeps them. A test fails when
+a correction's operation id no longer exists (Amazon renamed it) or when the spec starts
+documenting the corrected type, so a failed weekly spec refresh can mean a correction
+needs another look against the live API.
+
 ## API quirks
 
 When you find live behavior the specs do not describe, add it to

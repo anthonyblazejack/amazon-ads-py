@@ -24,9 +24,9 @@ Configuration comes from the environment:
 from __future__ import annotations
 
 import functools
-import traceback
 import json
 import os
+import traceback
 from collections import defaultdict
 from collections.abc import Callable, Sequence
 from datetime import UTC, date, datetime, timedelta
@@ -368,17 +368,27 @@ class AdsTools:
         return self._page(self._warehouse().query(sql), "rows")
 
     def search_operations(self, text: str, api: str | None = None) -> list[dict[str, Any]]:
-        """Find any of the ~1,200 operations in Amazon's published specs by keyword."""
-        return [
-            {
+        """Find any of the ~1,100 Ads API operations in Amazon's published specs by
+        keyword. Returns at most 40; add words to narrow it.
+
+        Tools of Amazon's hosted MCP server (ids starting mcp-) are left out unless api
+        names one: they are not Ads API endpoints and call_operation refuses them. A row
+        with a note differs from Amazon's spec in a way the note explains."""
+        rows = []
+        for op in catalog.search(text, api=api, limit=40):
+            row: dict[str, Any] = {
                 "id": op.id,
                 "method": op.method,
                 "path": op.path,
                 "summary": op.summary,
                 "read_only": op.read_only,
             }
-            for op in catalog.search(text, api=api, limit=40)
-        ]
+            if op.note:
+                row["note"] = op.note
+            if op.unsupported_reason:
+                row["unsupported"] = op.unsupported_reason
+            rows.append(row)
+        return rows
 
     def call_operation(
         self,
@@ -389,8 +399,13 @@ class AdsTools:
         query: dict[str, str] | None = None,
     ) -> Any:
         """Call a read-only operation from Amazon's specs by id (see search_operations).
-        Operations that can change data are refused here; use a plan tool instead."""
+        Operations that can change data are refused here; use a plan tool instead. The
+        mcp- tools of Amazon's hosted MCP server are refused too: they are not Ads API
+        endpoints, and the refusal names the operation to call where one is known."""
         op = catalog.get(operation)
+        # Before the read_only check, so an MCP tool that writes is refused for what it
+        # is rather than sent to the plan tools, which cannot do what most of them do.
+        op.ensure_sendable()
         if not op.read_only:
             raise PermissionError(
                 f"{op.id} ({op.method} {op.path}) can change data and cannot be called "

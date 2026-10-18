@@ -9,7 +9,9 @@ operation catalog.
 
 `amazon_ads.catalog` holds every operation from Amazon's 220 published OpenAPI specs:
 method, path, parameters, and the versioned media types Amazon expects in
-`Content-Type` and `Accept`.
+`Content-Type` and `Accept`. 1,094 of them, from 202 specs, are Ads API operations that
+`call` sends. The other 110 are the tools of Amazon's hosted MCP server (see
+[below](#operations-the-client-cannot-send)).
 
 ```python
 from amazon_ads import catalog
@@ -40,6 +42,42 @@ To pin a different media type version than the newest the spec lists, pass
 `content_type=` and `accept=`. `op.content_types` and `op.accepts` list what the spec
 documents.
 
+## Where the live API disagrees with the spec
+
+Some operations refuse the media type their own spec documents. `catalog.CORRECTIONS`
+records the type the live API accepts, and the catalog applies it when it loads, so
+regenerating the catalog from Amazon's specs never undoes it. A corrected operation's
+`op.accept` is what `call` sends and can be missing from `op.accepts`; `op.note` says
+why. The [coverage](../reference/coverage.md) page marks these operations **corrected**,
+and [API quirks](quirks.md) describes each one.
+
+```python
+op = catalog.get("advertising-billing:getAdvertiserInvoices")
+op.accepts   # ('application/vnd.invoices.v1.1+json',), which Amazon answers with 406
+op.accept    # 'application/json', what call() sends
+op.note      # why
+
+us.call("advertising-billing:getAdvertiserInvoices", query={"count": 10})["payload"]
+```
+
+## Operations the client cannot send
+
+Amazon's documentation also publishes the tools of its hosted Ads MCP server (beta) as
+OpenAPI files, and the catalog lists them as the `mcp-*` APIs, for example
+`mcp-billing:list_invoices` at `POST /mcp/list_invoices`. They are not Ads API
+endpoints: the Ads API hosts have no route for those paths and answer them with a 403.
+Each one's `op.unsupported_reason` says so, `catalog.search` leaves them out unless you
+pass `include_unsupported=True` or name their `api`, and `call` raises
+`UnsupportedOperationError` before sending anything. Where a matching Ads API operation
+is known, the error names it.
+
+```python
+catalog.search("invoices")                     # Ads API operations only
+catalog.search("invoices", api="mcp-billing")  # the MCP tools, each with its reason
+us.call("mcp-billing:list_invoices")           # UnsupportedOperationError: ... Use
+                                               # advertising-billing:getAdvertiserInvoices instead.
+```
+
 ## From the command line
 
 ```bash
@@ -49,10 +87,13 @@ adsctl ops call sponsored-brands-v4:ListSponsoredBrandsCampaigns -m US --body '{
 adsctl ops call reporting:getAsyncReport -m US -p reportId=abc-123
 ```
 
-`ops call` asks for confirmation before any operation that can change data.
+`ops call` asks for confirmation before any operation that can change data, and
+refuses the `mcp-*` tools without asking. `ops search --include-unsupported` lists those
+tools too.
 
 ## Keeping the catalog current
 
 The catalog is generated from Amazon's specs by `scripts/fetch_specs.py` and
 `scripts/generate_catalog.py`. A scheduled workflow re-fetches them weekly and opens a
-pull request when Amazon changes anything. See [development](../development.md).
+pull request when Amazon changes anything. Corrections live in `amazon_ads/catalog.py`,
+not in the generated file, so a refresh keeps them. See [development](../development.md).

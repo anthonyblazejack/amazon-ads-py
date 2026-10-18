@@ -8,6 +8,33 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- `advertising-billing:getAdvertiserInvoices` (GET /invoices) and
+  `advertising-billing:getInvoice` (GET /invoices/{invoiceId}) now send
+  `Accept: application/json`. Amazon's spec documents only
+  `application/vnd.invoices.v1.1+json` and `application/vnd.invoice.v1.1+json`, and the
+  live API answers both with 406 Not Acceptable and an empty body (the list on all 12
+  marketplaces tested), so `call()` and `call_operation` could not read invoices at all. The fix is a
+  `catalog.CORRECTIONS` entry applied when the catalog loads, not an edit of the
+  generated `catalog.json`, so regenerating the catalog from Amazon's specs keeps it.
+  `Operation.note` says why an operation differs from its spec, `op.accepts` still lists
+  what the spec documents, and the coverage page marks the two operations
+  **corrected**. API notes describe the 406 and the rest of what the invoice endpoints
+  do that the spec does not say: the `{"status", "payload"}` wrapper, `nextCursor`
+  paging that drops the key on the last page, the open billing period listed as
+  `ACCUMULATING` with no id, and `POST /invoiceSummaries/list` answering with
+  `invoiceSummaries` at the top level where its spec nests them under `aggregation`.
+- The `mcp-*` operations are no longer sent. They come from the OpenAPI files in which
+  Amazon publishes the tools of its hosted Ads MCP server (beta), and their
+  `POST /mcp/<tool>` paths are not routes on the Ads API hosts, which answer them with
+  403 "Invalid key=value pair (missing equal-sign) in Authorization header", the same as
+  any path they do not serve. That reads like a demand for AWS request signing but is
+  not one. 47 of the 110 passed `Operation.read_only`, so `call_operation` let an agent
+  spend a call on them. `ProfileClient.call()`, `call_operation` and `adsctl ops call`
+  now refuse them before any request with `UnsupportedOperationError`, whose message
+  names the Ads API operation to call instead for `mcp-billing:list_invoices` and
+  `mcp-billing:list_invoice_summaries`. `call_operation` checks this before its
+  write check, so an MCP tool that writes is not pointed at the plan tools.
+
 - A Sponsored Products campaign budget given as a number (`{"campaignId": "9", "budget":
   20}`) is now sent as the object Amazon requires, `{"budget": 20.0, "budgetType":
   "DAILY"}`. Amazon rejects a bare number with a 400 for the whole request that names no
@@ -28,6 +55,12 @@ All notable changes to this project are documented here. The format follows
   records, per entity, which fields Amazon takes only as an object.
 
 ### Added
+
+- `UnsupportedOperationError`, `Operation.unsupported_reason`, `Operation.note`,
+  `Operation.ensure_sendable()`, `catalog.CORRECTIONS`, `catalog.is_hosted_mcp_tool()`,
+  `catalog.search(include_unsupported=True)` and `adsctl ops search
+  --include-unsupported`. `search_operations` rows carry `note` and `unsupported` when
+  they apply.
 
 - API notes now record Amazon's keyword text constraints and the shape of its report
   creation throttle, so `api_notes` and `docs/guide/quirks.md` carry both. The keyword
@@ -73,6 +106,14 @@ All notable changes to this project are documented here. The format follows
   that hit an internal error are resent for updates and archives but never for creates.
 - `apply_plan` in the MCP server reports each failed item with its id, label, what was
   sent, the allowed range and what to do.
+
+### Changed
+
+- `catalog.search()`, `search_operations` and `adsctl ops search` leave out operations
+  this client cannot send (today the 110 `mcp-*` tools) unless asked for them or scoped
+  to their API with `api=`. A scoped search returns them with the reason instead of an
+  empty list. The coverage page counts 1,094 sendable operations in 202 Ads API specs,
+  counts the 18 MCP tool specs (110 tools) apart, and marks their rows **MCP tool**.
 
 ## [0.1.0] - 2026-09-26
 

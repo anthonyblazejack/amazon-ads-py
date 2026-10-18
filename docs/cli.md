@@ -104,9 +104,12 @@ undo. The exit code is 2 if any item failed.
 ## ops
 
 ```bash
-adsctl ops search WORDS... [--api SLUG]
+adsctl ops search WORDS... [--api SLUG] [--include-unsupported]
 adsctl ops show OPERATION_ID
 adsctl ops call OPERATION_ID -m US [--body JSON|@file.json] [-p name=value]... [-q name=value]... [--yes]
 ```
 
 `ops call` confirms before any operation that can change data unless `--yes` is given.
+It refuses the `mcp-*` tools of Amazon's hosted MCP server without asking: they are not
+Ads API endpoints. `ops search` leaves them out unless `--include-unsupported` is given
+or `--api` names one, and `ops show` prints the reason as `unsupported_reason`.

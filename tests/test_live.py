@@ -10,7 +10,7 @@ from datetime import UTC, date, datetime, timedelta
 
 import pytest
 
-from amazon_ads import AmazonAds, ProfileClient
+from amazon_ads import AmazonAds, ApiError, NotFoundError, ProfileClient, catalog
 from amazon_ads.reports import PRESETS
 
 pytestmark = pytest.mark.live
@@ -58,3 +58,18 @@ def test_suggested_bids_for_enabled_keywords(live: ProfileClient) -> None:
     if not keywords:
         pytest.skip("No enabled keywords")
     assert live.bids.for_keywords(keywords)
+
+
+def test_invoices_answer_the_corrected_accept_type(live: ProfileClient) -> None:
+    """Amazon answered the spec's vendor Accept type with 406 and application/json with
+    200. Fails if application/json stops working, and also if the vendor type starts
+    working, which means catalog.CORRECTIONS can drop the entry."""
+    op = catalog.get("advertising-billing:getAdvertiserInvoices")
+    try:
+        body = live.call(op.id, query={"count": 1})
+    except NotFoundError:
+        pytest.skip("This marketplace has no invoices to read (India answered 404)")
+    assert "invoiceSummaries" in body["payload"]
+    with pytest.raises(ApiError) as refused:
+        live.call(op.id, query={"count": 1}, accept=op.accepts[0])
+    assert refused.value.status_code == 406
