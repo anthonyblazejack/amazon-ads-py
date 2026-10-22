@@ -1,3 +1,5 @@
+# Copyright (c) 2026 Anthony Jack
+# SPDX-License-Identifier: Apache-2.0
 """Amazon Ads regions and the marketplaces that belong to each.
 
 Every Ads API call goes to one of three regional hosts, chosen by the marketplace the

@@ -1,3 +1,5 @@
+# Copyright (c) 2026 Anthony Jack
+# SPDX-License-Identifier: Apache-2.0
 """A local SQLite store that keeps report history past Amazon's retention window.
 
 Amazon keeps 65 to 95 days of report data and keeps revising recent days: conversions

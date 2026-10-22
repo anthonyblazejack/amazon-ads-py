@@ -1,3 +1,5 @@
+# Copyright (c) 2026 Anthony Jack
+# SPDX-License-Identifier: Apache-2.0
 """Change history (``POST /history``): every change to a Sponsored Products or Sponsored
 Brands entity over the last 90 days, with its previous and new value and a timestamp.
 

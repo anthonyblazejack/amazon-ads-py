@@ -6,6 +6,20 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Contributor terms in `CONTRIBUTING.md`, and a `NOTICE` file. A pull request now carries
+  an explicit licence grant wide enough to relicense, rather than a Developer Certificate
+  of Origin sign-off. Under Apache-2.0 alone every contributor keeps their own copyright
+  and licenses only under Apache-2.0, so the project could never be offered under
+  different terms without finding every contributor who ever landed a patch. Asking once,
+  up front, costs a contributor nothing. Nothing already published changes: an Apache-2.0
+  grant on a release cannot be withdrawn, and this does not try to. `NOTICE` also records
+  that the generated operation catalogue comes from Amazon's published specifications and
+  is Amazon's material, under Amazon's terms rather than this project's.
+- An SPDX copyright header on each source file, which is two lines rather than the full
+  Apache boilerplate and is machine readable.
+
 ### Fixed
 
 - A path parameter can no longer send a catalogued operation to a different endpoint.

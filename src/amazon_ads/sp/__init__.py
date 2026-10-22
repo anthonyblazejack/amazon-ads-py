@@ -1,3 +1,5 @@
+# Copyright (c) 2026 Anthony Jack
+# SPDX-License-Identifier: Apache-2.0
 """Sponsored Products v3 campaign management.
 
 Field names, media types, filter names and batch limits below are taken from Amazon's

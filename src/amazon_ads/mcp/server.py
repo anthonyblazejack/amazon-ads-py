@@ -1,3 +1,5 @@
+# Copyright (c) 2026 Anthony Jack
+# SPDX-License-Identifier: Apache-2.0
 """An MCP server that lets Claude (or any MCP client) read and change an Amazon Ads account.
 
 Reads are direct. Every write goes through a change plan in two steps, so nothing changes

@@ -1,3 +1,5 @@
+# Copyright (c) 2026 Anthony Jack
+# SPDX-License-Identifier: Apache-2.0
 """Change plans: a reviewable, reversible description of a batch update.
 
 A :class:`ChangePlan` records, for every entity it touches, the values it held when the

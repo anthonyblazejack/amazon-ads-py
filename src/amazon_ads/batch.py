@@ -1,3 +1,5 @@
+# Copyright (c) 2026 Anthony Jack
+# SPDX-License-Identifier: Apache-2.0
 """Results of batch writes (Amazon's 207 Multi-Status responses).
 
 Amazon accepts or rejects each item in a batch create, update or delete on its own, and

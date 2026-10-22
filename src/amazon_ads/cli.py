@@ -1,3 +1,5 @@
+# Copyright (c) 2026 Anthony Jack
+# SPDX-License-Identifier: Apache-2.0
 """``adsctl``: the command line interface.
 
 Every read command prints a table by default and JSON with ``--json`` (or ``--format

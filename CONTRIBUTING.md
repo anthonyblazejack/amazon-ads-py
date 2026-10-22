@@ -25,6 +25,32 @@ Thanks for helping. The short version:
   change plan, and the MCP server must never apply a change without the plan's
   fingerprint.
 
+## Contributor terms
+
+By opening a pull request you confirm two things.
+
+**You wrote it, or you have the right to submit it.** The contribution is your own work,
+or you have permission from whoever owns it, and submitting it here breaks no agreement
+you are under. If any part came from somewhere else, say where in the pull request.
+
+**You grant a licence wide enough to relicense.** You keep the copyright in what you
+write. You grant Anthony Jack a perpetual, worldwide, irrevocable, royalty-free licence
+to use, reproduce, modify, publish and distribute your contribution, and to sublicense it
+and offer it to others under any licence terms, including terms different from the ones
+this project uses today.
+
+That second paragraph is the part that matters and the reason this is a grant rather than
+a Developer Certificate of Origin sign-off. Under Apache-2.0 alone each contributor keeps
+their own copyright and licenses only under Apache-2.0, so a project cannot later be
+offered under different terms without going back to every contributor who ever landed a
+patch. Projects that skip this and later want to change course have to track people down
+years afterwards, and some of them cannot be found. Asking once, up front, costs a
+contributor nothing and keeps the choice open.
+
+The project is Apache-2.0 today and this does not change that. Anything already published
+stays published under it: an Apache-2.0 grant on a release cannot be withdrawn, and
+nothing here tries to. The grant is about what may happen to future versions.
+
 ## Reporting bugs
 
 Include the `adsctl --version`, the command or code, and the full error with Amazon's

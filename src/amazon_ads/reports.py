@@ -1,3 +1,5 @@
+# Copyright (c) 2026 Anthony Jack
+# SPDX-License-Identifier: Apache-2.0
 """Reporting v3: request a report, wait for it, download and parse it, in one call.
 
 Amazon's reports are asynchronous: ``POST /reporting/reports`` queues one, ``GET

@@ -1,3 +1,5 @@
+# Copyright (c) 2026 Anthony Jack
+# SPDX-License-Identifier: Apache-2.0
 """amazon-ads-py: a typed client, CLI and MCP server for the Amazon Ads API."""
 
 from amazon_ads._version import __version__

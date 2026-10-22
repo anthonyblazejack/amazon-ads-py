@@ -1,3 +1,5 @@
+# Copyright (c) 2026 Anthony Jack
+# SPDX-License-Identifier: Apache-2.0
 """Suggested bids from Amazon's theme-based bid recommendations.
 
 ``POST /sp/targets/bid/recommendations`` behaves in ways the spec does not spell out, and

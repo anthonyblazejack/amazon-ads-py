@@ -1,3 +1,5 @@
+# Copyright (c) 2026 Anthony Jack
+# SPDX-License-Identifier: Apache-2.0
 """Fail if any tracked text file contains an em dash (U+2014).
 
 The project writes with commas, colons, semicolons and parentheses instead. Run from the

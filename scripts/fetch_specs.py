@@ -1,3 +1,5 @@
+# Copyright (c) 2026 Anthony Jack
+# SPDX-License-Identifier: Apache-2.0
 """Download every OpenAPI spec Amazon's Ads API documentation publishes.
 
 Amazon's docs site is driven by a table of contents at

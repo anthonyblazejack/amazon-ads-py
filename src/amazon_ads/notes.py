@@ -1,3 +1,5 @@
+# Copyright (c) 2026 Anthony Jack
+# SPDX-License-Identifier: Apache-2.0
 """Amazon Ads API behavior that the specs do not state, found by calling the live API.
 
 Served to Claude by the MCP server (``api_notes`` tool and ``amazon-ads://notes``

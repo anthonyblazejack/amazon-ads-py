@@ -1,3 +1,5 @@
+# Copyright (c) 2026 Anthony Jack
+# SPDX-License-Identifier: Apache-2.0
 """Typed models for the entities the library wraps.
 
 Models accept Amazon's camelCase field names and Python snake_case alike, keep any field

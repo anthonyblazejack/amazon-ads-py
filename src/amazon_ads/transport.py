@@ -1,3 +1,5 @@
+# Copyright (c) 2026 Anthony Jack
+# SPDX-License-Identifier: Apache-2.0
 """HTTP transport: headers, retries, throttling and error mapping.
 
 Retry rules:

@@ -1,3 +1,5 @@
+# Copyright (c) 2026 Anthony Jack
+# SPDX-License-Identifier: Apache-2.0
 """Sponsored Brands campaign management: campaigns, ad groups and ads (v4), keywords and
 negative keywords (v3).
 

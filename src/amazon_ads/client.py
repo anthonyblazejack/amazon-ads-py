@@ -1,3 +1,5 @@
+# Copyright (c) 2026 Anthony Jack
+# SPDX-License-Identifier: Apache-2.0
 """The entry points: :class:`AmazonAds` for the account, :class:`ProfileClient` per market."""
 
 from __future__ import annotations

@@ -1,3 +1,5 @@
+# Copyright (c) 2026 Anthony Jack
+# SPDX-License-Identifier: Apache-2.0
 """Exceptions raised by the client.
 
 Every HTTP failure becomes an :class:`ApiError` subclass carrying the status code, Amazon's

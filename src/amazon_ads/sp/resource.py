@@ -1,3 +1,5 @@
+# Copyright (c) 2026 Anthony Jack
+# SPDX-License-Identifier: Apache-2.0
 """Generic create, list, update and delete for Sponsored Products v3 entities.
 
 Every SP v3 entity follows the same contract:
